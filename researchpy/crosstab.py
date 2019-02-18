@@ -78,7 +78,7 @@ def crosstab(group1, group2, prop= None, test = False, margins= True,
         
         # Cramer's V
         # V = square_root(chi_square / min(c-1, r-1))
-        V = numpy.sqrt(test_val / crosstab2.iloc[-1,-1] * min((len(crosstab.index) - 1), (len(crosstab.columns) - 1)))
+        V = numpy.sqrt(test_val / (crosstab2.iloc[-1,-1] * min((len(crosstab.index) - 1), (len(crosstab.columns) - 1))))
         
         
         
