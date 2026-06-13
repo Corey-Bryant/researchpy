@@ -581,8 +581,6 @@ class LinearModel(CoreModel):
             Lines for the right side of the header.
         """
         if descriptives_df is None:
-            # OLS descriptives_df is transposed: single row, columns = stat names.
-            # Convert to index-oriented for to_string.
             if self.ModelResults.fit_statistics is not None:
                 table = self.ModelResults.as_dataframe("fit_statistics", self.ModelResults.fit_statistics)
         else:

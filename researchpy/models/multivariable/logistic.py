@@ -52,7 +52,7 @@ class LogisticRegression(GeneralModel):
     """
 
     def __init__(self, formula_like, data=None, display_summary=True,
-                 solver_options=None,
+                 report_as="or", solver_options=None,
                  initial_betas=None, initial_betas_method="ols"):
 
         if data is None:
@@ -98,7 +98,7 @@ class LogisticRegression(GeneralModel):
         self._compute_statistics()
 
         # Build ModelResults (results() sets self.ModelResults internally)
-        self.results(report_as="or", return_type="Dataframe", pretty_format=True)
+        self.results(report_as=report_as, return_type="Dataframe", pretty_format=True)
 
         # Display the model results summary
         if display_summary:
@@ -162,10 +162,10 @@ class LogisticRegression(GeneralModel):
 
 
 
-    def predict(self, estimate="y", trans=None, **kwargs):
+    def predict(self, estimate="y", trans=None, decimals=4, **kwargs):
 
         #return super().predict(self, estimate=estimate, trans=expit)
-        return predict(self, estimate=estimate, trans=trans)
+        return predict(self, estimate=estimate, trans=trans, decimals=decimals)
 
 
 
@@ -206,21 +206,21 @@ class LogisticRegression(GeneralModel):
             True D defined as DV != 0
 
         Formulas:
-            - Sensitivity Pr(+|D)             = TP / (TP + FN) * 100
-            - Specificity Pr(-|~D)            = TN / (TN + FP) * 100
-            - Positive predictive value Pr(D|+)  = TP / (TP + FP) * 100
-            - Negative predictive value Pr(~D|-) = TN / (TN + FN) * 100
-            - False + rate for true ~D Pr(+|~D)  = FP / (FP + TN) * 100
-            - False - rate for true D Pr(-|D)    = FN / (FN + TP) * 100
-            - False + rate for classified + Pr(~D|+) = FP / (TP + FP) * 100
-            - False - rate for classified - Pr(D|-)  = FN / (TN + FN) * 100
-            - Correctly classified               = (TP + TN) / N * 100
+            - Sensitivity Pr(+|1) = TP / (TP + FN) * 100
+            - Specificity Pr(-|0) = TN / (TN + FP) * 100
+            - Positive predictive value Pr(1|+) = TP / (TP + FP) * 100
+            - Negative predictive value Pr(0|-) = TN / (TN + FN) * 100
+            - False + rate for true 0 Pr(+|0) = FP / (FP + TN) * 100
+            - False - rate for true 1 Pr(-|1) = FN / (FN + TP) * 100
+            - False + rate for classified + Pr(0|+) = FP / (TP + FP) * 100
+            - False - rate for classified - Pr(1|-)  = FN / (TN + FN) * 100
+            - Correctly classified = (TP + TN) / N * 100
 
         Where:
-            TP = True Positives  (actual D, classified +)
-            TN = True Negatives  (actual ~D, classified -)
-            FP = False Positives (actual ~D, classified +)
-            FN = False Negatives (actual D, classified -)
+            TP = True Positives  (actual 1, classified +)
+            TN = True Negatives  (actual 0, classified -)
+            FP = False Positives (actual 0, classified +)
+            FN = False Negatives (actual 1, classified -)
 
         Examples
         --------
@@ -271,16 +271,17 @@ class LogisticRegression(GeneralModel):
 
         stats_data = {
             "Statistic": [
-                "                   Sensitivity Pr( +| D)",
-                "                   Specificity Pr( -|~D)",
-                "     Positive predictive value Pr( D| +)",
-                "     Negative predictive value Pr(~D| -)",
-                "      False + rate for true ~D Pr( +|~D)",
-                "       False - rate for true D Pr( -| D)",
-                "False + rate for classified +  Pr(~D| +)",
-                "False - rate for classified -  Pr( D| -)",
+                "                   Sensitivity Pr(+|1)",
+                "                   Specificity Pr(-|0)",
+                "     Positive predictive value Pr(1|+)",
+                "     Negative predictive value Pr(0|-)",
+                "       False + rate for true 0 Pr(+|0)",
+                "       False - rate for true 1 Pr(-|1)",
+                " False + rate for classified + Pr(0|+)",
+                " False - rate for classified - Pr(1|-)",
                 "Correctly classified",
             ],
+
             "Percent": [
                 _safe_pct(tp, tp + fn),        # Sensitivity: TP / (TP + FN)
                 _safe_pct(tn, tn + fp),        # Specificity: TN / (TN + FP)
@@ -293,6 +294,7 @@ class LogisticRegression(GeneralModel):
                 _safe_pct(tp + tn, n),         # Correctly classified: (TP + TN) / N
             ],
         }
+
 
         # --- Return based on return_type ---
         if return_type.lower() in ["dict", "dictionary"]:
@@ -399,37 +401,64 @@ class LogisticRegression(GeneralModel):
     #--------------------------------------------------------------------#
     #                           Summary Methods                          #
     #--------------------------------------------------------------------#
-    def summary(self, total_width=78, return_string=False, report_as="or", table_decimals=None):
+    def _summary_header_right(self, width=78, descriptives_df=None):
         """
-        Print a formatted summary of the logistic regression results.
+        Build the right side of the summary header for generalized models.
+
+        When *descriptives_df* is provided the values are read from that
+        DataFrame via ``to_string(header=False)`` so the summary is driven
+        entirely by the DataFrames returned from ``self.results()``.
+
+        Otherwise falls back to rendering from ``self`` attributes directly.
 
         Parameters
         ----------
-        total_width : int, optional
-            Character width for the summary output. Default is 78.
-        return_string : bool, optional
-            If True, returns the formatted string instead of printing.
-            Default is False.
-        report_as : str, optional
-            ``"or"`` for odds ratios (default), ``"coef"`` for raw
-            log-odds coefficients.
-        table_decimals : dict, optional
-            Dictionary specifying decimal places for different statistics.
+        width : int
+            Available character width.
+        descriptives_df : DataFrame or None
+            Descriptives DataFrame from ``self.results()`` (index-oriented:
+            stat names as index, values in column 0).
 
         Returns
         -------
-        str or None
-            If *return_string* is True, returns the formatted summary string.
-            Otherwise, prints to terminal and returns None.
+        list of str
+            Lines for the right side of the header.
         """
-        # Ensure ModelResults is up-to-date with the requested report format
-        self.results(report_as=report_as, return_type="Dataframe", pretty_format=True,
-                     table_decimals=table_decimals)
+        if descriptives_df is not None:
+            # Convert to index-oriented for to_string.
+            if self.ModelResults.fit_statistics is not None:
+                table = self.ModelResults.as_dataframe("fit_statistics", self.ModelResults.fit_statistics)
+        else:
+            if not isinstance(descriptives_df, pd.DataFrame):
+                table = pd.DataFrame.from_dict(descriptives_df)
+            else:
+                table = descriptives_df.copy()
 
-        return super().summary(total_width=total_width, return_string=return_string,
-                               table_decimals=table_decimals)
+
+            desc_lines = table.to_string(
+                header=False,
+                index=False,
+                justify="right"
+            ).split("\n")
+
+            return desc_lines
+
+
+        # Fallback: build from FitStatistics dataclass
+        lines = [f"Number of obs = {self.n:>8}"]
+
+        if self.FitStatistics.test_stat is not None and self.FitStatistics.df_model is not None:
+            lines.append(f"LR chi2({int(self.FitStatistics.df_model)})    = {self.FitStatistics.test_stat:>8.4f}")
+
+        if self.FitStatistics.test_pval is not None:
+            lines.append(f"Prob > chi2   = {self.FitStatistics.test_pval:>8.4f}")
+
+        n_iter = self.FitStatistics.additional_stats.get("n_iterations") if self.FitStatistics.additional_stats else None
+        if n_iter is not None:
+            lines.append(f"N iterations  = {n_iter:>8}")
+
+        return lines
 
 
 # Convenience alias
 Logistic = LogisticRegression
-lo

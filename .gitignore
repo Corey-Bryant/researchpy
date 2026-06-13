@@ -167,4 +167,5 @@ cython_debug/
 
 # PyCharm
 .idea/
-.idea/*
+.idea/*!/.venv/
+!/researchpy.egg-info/

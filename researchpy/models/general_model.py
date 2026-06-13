@@ -9,9 +9,6 @@ from researchpy.models.postestimation import LikelihoodRatioTest
 
 from researchpy.predict import predict
 
-from scipy.stats import chi2
-
-
 
 class GeneralModel(CoreModel):
     """
@@ -139,10 +136,8 @@ class GeneralModel(CoreModel):
                 self._lr_test = LikelihoodRatioTest(self, store_null=True)
 
                 if self.solver_options.display:
-                    print(f"\nLR Chi^2: {self._lr_test.LR_chi2:.4f}, df: {self._lr_test.df}, p-value: {self._lr_test.p_value:.4g}")
-                    print("")
-                    print(f"Optimization converged in {result.nfev} iterations")
-                    print(f"Final log-likelihood: {-result.fun:.4f}")
+                    print(f"")
+                    print(f"")
             else:
                 if self.solver_options.display:
                     print(f"Warning: scipy optimization did not converge ({result.message})")
@@ -168,9 +163,6 @@ class GeneralModel(CoreModel):
             # Perform Likelihood Ratio Test for Newton-Raphson path
             self.nfev = len(self.logL)
             self._lr_test = LikelihoodRatioTest(self, store_null=True)
-
-            if self.solver_options.display:
-                print(f"\nLR Chi^2: {self._lr_test.LR_chi2:.4f}, df: {self._lr_test.df}, p-value: {self._lr_test.p_value:.4g}")
 
         # ---- Populate FitStatistics dataclass from LR test results ----
         ll_full = self.logL[-1] if self.logL else None
@@ -198,16 +190,10 @@ class GeneralModel(CoreModel):
             "converged": converged or (self.logL is not None and len(self.logL) > 0),
         }
 
-        # ---- Backward-compatible loose attributes ----
-        self.LL_null = ll_null
-        self.LR_chi2 = self._lr_test.LR_chi2
-        self.model_df = self._lr_test.df
-        self.model_p_value = self._lr_test.p_value
 
+    def predict(self, estimate=None, trans=None, decimals=4, **kwargs):
 
-    def predict(self, estimate=None, trans=None):
-
-        return predict(self, estimate=estimate, trans=trans)
+        return predict(self, estimate=estimate, trans=trans, decimals=decimals, **kwargs)
 
 
     #--------------------------------------------------------------------------------------#
@@ -453,6 +439,8 @@ class GeneralModel(CoreModel):
         list of str
             Lines for the right side of the header.
         """
+        import pandas as pd
+
         if descriptives_df is not None:
             # Convert to index-oriented for to_string.
             if self.ModelResults.fit_statistics is not None:

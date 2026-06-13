@@ -46,7 +46,7 @@ class CoreModel():
     def obj_function(self, obj_function):
         self._obj_function = obj_function
 
-    def __init__(self, formula_like, data=None, matrix_type=1, conf_level=0.95, display_summary=True,
+    def __init__(self, formula_like, data=None, matrix_type=1, conf_level=0.95,
                  family="gaussian", link="normal",
                  solver_options=None, table_decimals=None):
 
