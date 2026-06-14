@@ -1,12 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thursday, August  2, 2018
-@author: Corey Bryant
-
-Last updated on Wednesday, March 4, 2026
-Updated by @author: Corey Bryant
-"""
-
 import pandas as pd
 import numpy as np
 import scipy.stats
@@ -74,25 +65,29 @@ def crosstab(group1, group2, prop=None, test=False, margins=True,
 
 
         ## Effect size measures ##
+        if test:
+            # Cramer's phi
+            # phi = square_root(chi_square / N)
+            # Where N = total sample size
+            phi = np.sqrt(test_val / n)
 
-        # Cramer's phi
-        # phi = square_root(chi_square / N)
-        # Where N = total sample size
-        phi = np.sqrt(test_val / n)
+            # Cramer's V
+            # V = square_root(chi_square / min(c-1, r-1))
+            min_dim = min((num_row - 1), (num_col - 1))
 
-        # Cramer's V
-        # V = square_root(chi_square / min(c-1, r-1))
-        if cramer_correction == True:
-            phi_corrected = (test_val / n) - ((num_row - 1) * (num_col - 1) / (n - 1))
-            phi_corrected = max(0, phi_corrected)
+            if min_dim == 0:
+                V = np.nan
+            elif cramer_correction == True:
+                phi_corrected = (test_val / n) - ((num_row - 1) * (num_col - 1) / (n - 1))
+                phi_corrected = max(0, phi_corrected)
 
-            row_corrected = num_row - np.square(num_row - 1) / (n - 1)
-            col_corrected = num_col - np.square(num_col - 1) / (n - 1)
+                row_corrected = num_row - np.square(num_row - 1) / (n - 1)
+                col_corrected = num_col - np.square(num_col - 1) / (n - 1)
 
-            V = np.sqrt(phi_corrected / min((num_row -1), (num_col - 1)))
+                V = np.sqrt(phi_corrected / min_dim)
 
-        else:
-            V = np.sqrt(test_val / (n * min((num_row - 1), (num_col - 1))))
+            else:
+                V = np.sqrt(test_val / (n * min_dim))
 
 
 

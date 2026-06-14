@@ -12,22 +12,6 @@ import numpy
 import scipy.stats
 
 
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Dec 20 12:36:53 2021
-
-@author: Corey
-"""
-
-# -*- coding: utf-8 -*-
-"""
-Created on Sun Jul 22 13:18:39 2018
-Updated on December 23, 2018
-
-@author: Corey Bryant
-
-"""
-
 
 def ttest(group1, group2, group1_name= None, group2_name= None,
            equal_variances= True, paired= False,

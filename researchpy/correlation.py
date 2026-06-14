@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Aug  6 12:18:47 2018
-
-@author: bryantcm
-"""
-
 import pandas
 import numpy
 import scipy.stats
@@ -14,13 +7,16 @@ import itertools
 
 
 def corr_case(dataframe, method="pearson"):
+
     df = dataframe.dropna(how='any')._get_numeric_data()
     dfcols = pandas.DataFrame(columns=df.columns)
+
 
     # Getting r an p value dataframes ready
     r_vals = dfcols.transpose().join(dfcols, how='outer')
     p_vals = dfcols.transpose().join(dfcols, how='outer')
     length = str(len(df))
+
 
     # Setting test
     if method in (None, "pearson"):
@@ -37,6 +33,7 @@ def corr_case(dataframe, method="pearson"):
 
     else:
         raise ValueError("Unknown method: " + method)
+
 
     # Rounding values for the r and p value dataframes
     for r in df.columns:
@@ -47,24 +44,29 @@ def corr_case(dataframe, method="pearson"):
         for c in df.columns:
             p_vals.loc[r, c] = format(test(df[r], df[c])[1], '.4f')
 
+
     # Getting the testing information dataframe ready
     info = pandas.DataFrame(numpy.zeros(shape=(1, 1)),
                             columns=[f"{test_name} correlation test using list-wise deletion"],
                             dtype=object)
     info.iloc[0, 0] = f"Total observations used = {length}"
 
+
     return info, r_vals, p_vals
 
 
 
 
+
 def corr_pair(dataframe, method="pearson"):
+
     df = dataframe
 
     correlations = {}
     pvalues = {}
     length = {}
     columns = df.columns.tolist()
+
 
     # Setting test
     if method in (None, "pearson"):
@@ -81,6 +83,7 @@ def corr_pair(dataframe, method="pearson"):
 
     else:
         raise ValueError("Unknown method: " + method)
+
 
     # Iterrating through the Pandas series and performing the correlation
     # analysis
