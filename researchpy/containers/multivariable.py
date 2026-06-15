@@ -27,110 +27,16 @@ Or attribute access::
 
 from __future__ import annotations
 
+
+from .base import CoreDataclass
 from dataclasses import dataclass, field, fields
 from typing import Union, Any, Dict, Optional
 
 import numpy as np
 import pandas as pd
 import re
-import itertools
 
 
-
-@dataclass
-class CoreDataclass:
-    """Generic base dataclass providing common utility methods.
-
-    All methods reference only ``self`` and dynamically inspect fields,
-    so subclasses inherit them without needing to override.
-    """
-
-    def __post_init__(self):
-        self.__name__ = "Researchpy.CoreDataclass"
-
-
-    def to_dict(self, drop_none=True):
-        dct = {}
-        for f in fields(self):
-            if drop_none and getattr(self, f.name) is not None:
-                dct[f.name] = getattr(self, f.name)
-
-        return dct
-
-
-    def _get_summary(self, skip_raw_arrays=False):
-        """Print a human-readable summary of all DataFrame/dict fields."""
-        printed = []
-
-        for f in fields(self):
-            val = getattr(self, f.name)
-
-            if val is None:
-                continue
-
-            #if isinstance(val, dict): val = pd.DataFrame.from_dict(val)
-
-            if isinstance(val, pd.DataFrame):
-                printed.append(val.to_string(index=False))
-
-            elif isinstance(val, (list, np.ndarray)):
-                if not skip_raw_arrays:
-                    try:
-                        val = pd.Series(val)
-                        printed.append(val.to_string(index=False))
-
-                    except:
-                        try:
-                            for x in val: printed.append(f"{x}")
-                        except:
-                            print(f"{f.name} could not be printed as a DataFrame or Series, and is not a simple list/array. Skipping.")
-                            continue
-                else:
-                    continue # skip raw arrays
-
-            else:
-                printed.append(f"{f.name}: {val}")
-
-        print("\n".join(printed))
-
-
-    def info(self):
-        class_name = type(self).__name__
-        parts = [f"Class({class_name})"]
-
-        for f in fields(self):
-            val = getattr(self, f.name)
-
-            if val is None:
-                parts.append(f"  {f.name}=None")
-
-            elif isinstance(val, pd.DataFrame):
-                parts.append(f"  {f.name}=pd.DataFrame({val.shape[0]}x{val.shape[1]})")
-
-            elif isinstance(val, dict):
-                parts.append(f"  {f.name}=dict({len(val)} keys)")
-
-            elif isinstance(val, (list, np.ndarray)):
-                if isinstance(val, list):
-                    length = len(val)
-                    parts.append(f"  {f.name}={type(val).__name__}(len={length})")
-                else:
-                    parts.append(f"  {f.name}=np.ndarray(shape={val.shape})")
-
-            else:
-                parts.append(f"  {f.name}={val!r}")
-
-        return "\n\n".join(parts) + "\n)"
-
-
-    def __iter__(self):
-        """Yield fields in order for tuple-style unpacking."""
-        for f in fields(self):
-            yield getattr(self, f.name)
-
-
-    def __repr__(self):
-        return self.info()
 
 
 @dataclass
@@ -715,6 +621,10 @@ class ModelTerms:
     ----------
     terms : list[Term]
         List of ``Term`` objects, one per model term.
+    dv : list[str] or None
+        Dependent variable name(s) extracted from the formula LHS.
+        ``None`` when built from ``from_design_info()`` (DV info lives
+        separately in that pathway).
 
     Examples
     --------
@@ -725,16 +635,102 @@ class ModelTerms:
         mt.column_map    # {"C(drug)[T.1]": "1", "disease": "disease", …}
         mt["C(drug)"]    # Term object for drug
         mt[0]            # first Term (usually Intercept)
+
+    Build from a formula string (lightweight, no data required)::
+
+        mt = ModelTerms.from_formula("y ~ C(x) + C(a):C(b) + z")
+        mt.dv            # ['y']
+        mt.terms         # [Term('C(x)'), Term('C(a):C(b)'), Term('z')]
+        mt[0].name       # 'x'
+        mt[1].is_interaction  # True
     """
 
     terms: list = field(default_factory=list)   # list[Term]
+    dv: Optional[list] = None                   # list[str] — dependent variable names
 
     def __post_init__(self):
         self.__name__ = "Researchpy.ModelTerms"
 
     # ------------------------------------------------------------------ #
-    #  Factory                                                             #
+    #  Factories                                                           #
     # ------------------------------------------------------------------ #
+    @classmethod
+    def from_formula(cls, formula: str, include_intercept: bool = False) -> "ModelTerms":
+        """Parse a formula string into ``ModelTerms`` using Patsy's formula parser.
+
+        This is a lightweight parse that extracts structural information
+        (DV names, term names, interaction flags, factor flags) WITHOUT
+        requiring data and WITHOUT building a design matrix.
+
+        Parameters
+        ----------
+        formula : str
+            Patsy-style formula string (e.g., ``"y ~ C(x) + C(a):C(b)"``).
+        include_intercept : bool, optional
+            Whether to include the implicit intercept term. Default is False
+            (intercept is excluded since descriptive stats don't use it).
+
+        Returns
+        -------
+        ModelTerms
+            A ``ModelTerms`` instance with ``dv`` populated and ``Term``
+            objects for each RHS term. Note: ``columns``, ``levels``, and
+            ``reference`` will be empty/None since no data is available.
+
+        Raises
+        ------
+        ValueError
+            If the formula does not contain '~'.
+
+        Examples
+        --------
+        >>> mt = ModelTerms.from_formula("y ~ C(gender) + C(drug):C(dose)")
+        >>> mt.dv
+        ['y']
+        >>> mt[0].name
+        'gender'
+        >>> mt[0].is_factor
+        True
+        >>> mt[1].name
+        'drug:dose'
+        >>> mt[1].is_interaction
+        True
+        >>> mt[1].is_factor
+        [True, True]
+        """
+        import patsy
+
+        if "~" not in formula:
+            raise ValueError(
+                f"Formula must contain '~' separating dependent and independent "
+                f"variables. Got: '{formula}'. Example: 'y ~ C(x)'."
+            )
+
+        desc = patsy.ModelDesc.from_formula(formula)
+
+        # --- Extract DV names from LHS ---
+        dv_names = []
+        for lhs_term in desc.lhs_termlist:
+            for factor in lhs_term.factors:
+                dv_names.append(factor.code)
+
+        # --- Build Term objects from RHS ---
+        terms = []
+        for rhs_term in desc.rhs_termlist:
+            # Skip intercept (empty factors list) unless requested
+            if not rhs_term.factors:
+                if include_intercept:
+                    terms.append(Term(term="Intercept"))
+                continue
+
+            # Build the term string in Patsy notation: "C(x):C(k)" or "z"
+            term_str = ":".join(f.code for f in rhs_term.factors)
+
+            # Term.__post_init__ handles: name, is_interaction, is_factor
+            term_obj = Term(term=term_str)
+            terms.append(term_obj)
+
+        return cls(terms=terms, dv=dv_names)
     @classmethod
     def from_design_info(cls, design_info) -> "ModelTerms":
         """Build ``ModelTerms`` from a Patsy ``DesignInfo`` object.

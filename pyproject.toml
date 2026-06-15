@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "researchpy"
-version = "0.4.0"
+version = "0.3.8"
 authors = [ { name="Corey Bryant", email="ResearchPy.Official@proton.me" }]
 maintainers = [ {name="Corey Bryant", email="ResearchPy.Official@proton.me" }]
 description = "Researchpy produces Pandas DataFrames that contain relevant statistical testing information that is commonly required for academic research."

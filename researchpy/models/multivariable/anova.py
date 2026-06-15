@@ -556,8 +556,8 @@ class Anova(LinearModel):
             self._append_factor_effects(current_term, ss_factor, df_factor, stats)
 
 
-    def results(self, include_test_stat_p=True, include_effect_sizes=True, factor_effects=True,
-                return_type="Dataframe", na_rep='', pretty_format=True, table_decimals=None, *args):
+    def results(self, include_test_stat_p: object = True, include_effect_sizes: object = True, factor_effects: object = True,
+                return_type: object = "Dataframe", na_rep: object = '', pretty_format: object = True, table_decimals: object = None, *args: object) -> ModelResults:
         """
         Return the ANOVA results as a ``ModelResults`` dataclass.
 

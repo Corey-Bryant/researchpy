@@ -8,10 +8,7 @@ DEPRECATION NOTICE:
     The `model` class in this module is maintained for backward compatibility with v0.3.7.
     It will be deprecated in a future version. New code should use:
 
-        from researchpy.models import CoreModel, GeneralModel
-        from researchpy.models.multivariable import LogisticRegression
-        # or use aliases
-        from researchpy.models.multivariable import Logistic
+        from researchpy.models import CoreModel
 
     The new modular structure provides better organization and more functionality.
 """

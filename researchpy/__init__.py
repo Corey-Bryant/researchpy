@@ -14,11 +14,17 @@ from .predict import *
 
 # New modular structure imports
 #from .core.containerclasses import FitStatistics, ModelResults, TestResults
+from .core.data_utils import as_array, validate_array
 
-#from .models import CoreModel, GeneralModel, ModelResults, TestResults
 from .models import CoreModel, GeneralModel
 from .models.multivariable import Regress, LinearRegression, LM, Anova, ANOVA, LogisticRegression, Logistic
 
+# Summaries subpackage
+from .descriptive import summarize as summarize_new
+from . import descriptive
+
+# Dataset and Dataset Importers
+from . import datasets
 
 # These will be removed once refactoring is complete as they were never published
 from .ols import ols

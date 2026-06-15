@@ -1,4 +1,4 @@
-# Used
+
 import scipy.stats
 import patsy
 
@@ -105,7 +105,7 @@ class CoreModel():
         # New dataclass-based term/column mapping
         self._model_terms = ModelTerms.from_design_info(self._IV_design_info)
 
-        # Will be refractoring to use dataclasses to clean up codebase and make it more modular. This ModelFit
+        # Will be refractoring to use containers to clean up codebase and make it more modular. This ModelFit
         # dataclass will store the model design information and fit parameters that are common across different
         # regression models. By centralizing this information in a dataclass, it allows for cleaner code and easier
         # maintenance, as well as providing a standardized way to access model fit information across different model types.

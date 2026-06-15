@@ -11,10 +11,14 @@ Usage:
 
 """
 
-from researchpy.core.containerclasses import ModelFit, ModelEffects, CoefResults, FactorEffects, FitStatistics, ModelResults, TestResults, Term, ModelTerms, SolverOptions
+from .data_utils import as_array, validate_array
+from .containerclasses import ModelFit, ModelEffects, CoefResults, FactorEffects, FitStatistics, ModelResults, TestResults, Term, ModelTerms, SolverOptions
+
 
 # Define what gets exported with "from researchpy.core import *"
 __all__ = [
+    'as_array',
+    'validate_array',
     #'CoreModel',
     #'GeneralModel',
     'ModelFit',

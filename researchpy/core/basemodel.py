@@ -18,7 +18,7 @@ from researchpy.optimize.trackers import OptimizationTracker
 # Base model class for regression models. This class is not meant to be used directly, but rather to be inherited by
 # specific regression model classes (e.g., OLS, Logistic, etc.). It contains common functionality and attributes that
 # are shared across different types of regression models.
-class CoreModel():
+class BaseModel():
     """
 
     This is the base -model- object for Researchpy. By default, missing
