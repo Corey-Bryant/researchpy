@@ -6,11 +6,11 @@ This module provides the Anova class for conducting analysis of variance
 using sum of squares types I, II, and III.
 """
 
-import re
+import re  # used in _build_type3_terms (legacy patsy-style patterns)
 
 import numpy as np
 import scipy.stats
-import patsy
+import formulaic
 import pandas as pd
 from pandas import DataFrame
 
@@ -239,47 +239,50 @@ class Anova(LinearModel):
 
 
     @staticmethod
-    def _build_type3_terms(term_names):
+    def _build_type3_terms_formulaic(term_names):
         """
-        Convert patsy Treatment-coded term names to Sum-coded equivalents
+        Convert formulaic Treatment-coded term names to Sum-coded equivalents
         for Type III SS computation.
 
-        Handles both main effects and interaction terms, preserving any
-        user-specified reference categories by replacing Treatment(...) with Sum.
+        In formulaic, the default coding for C(x) is Treatment. To get Sum
+        coding, we use C(x, contr.sum).
+
+        For interactions like C(x):C(k), we convert to C(x, contr.sum):C(k, contr.sum).
 
         Parameters
         ----------
         term_names : list of str
-            Original term names from the design info (e.g., from
-            ``self._IV_design_info.term_names``).
+            Original term names from the ModelSpec (e.g., ['1', 'C(group)', 'x', 'C(group):C(drug)']).
 
         Returns
         -------
         list of str
             Term names rewritten for Sum coding.
         """
-        reference_pattern = re.compile(r'(?<=,|\s)(Treatment\(.*\))(?=\))')
-
         terms_sum = []
         for term in term_names:
-            if "Treatment" in term:
-                split_terms = term.split(":")
+            if term.strip() == "1":
+                terms_sum.append(term)
+                continue
 
-                if len(split_terms) == 1:
-                    terms_sum.append(
-                        re.sub(reference_pattern, 'Sum', split_terms[0]))
+            # Split interaction terms
+            parts = term.split(":")
+            converted_parts = []
+            for part in parts:
+                part = part.strip()
+                if part.startswith("C(") and "contr." not in part:
+                    # C(group) → C(group, contr.sum)
+                    # C(group, Treatment) → C(group, contr.sum)
+                    # Extract the variable name from C(...)
+                    inner = part[2:-1]  # strip C( and )
+                    # Remove any existing contrast specification
+                    var_name = inner.split(",")[0].strip()
+                    converted_parts.append(f"C({var_name}, contr.sum)")
                 else:
-                    interaction_terms = []
-                    for intterm in split_terms:
-                        if "Treatment" in intterm:
-                            interaction_terms.append(
-                                re.sub(reference_pattern, 'Sum', intterm))
-                        else:
-                            interaction_terms.append(
-                                intterm.replace(")", ", Sum)"))
-                    terms_sum.append(':'.join(interaction_terms))
-            else:
-                terms_sum.append(term.replace(")", ", Sum)"))
+                    # Continuous variable or already has contr spec
+                    converted_parts.append(part)
+
+            terms_sum.append(":".join(converted_parts))
 
         return terms_sum
 
@@ -312,8 +315,8 @@ class Anova(LinearModel):
     #                        Constructor                                  #
     # ------------------------------------------------------------------ #
 
-    def __init__(self, formula_like, data=None, sum_of_squares=3, conf_level=0.95, display_summary=True,
-                 solver_options=None, table_decimals=None):
+    def __init__(self, formula_like, data=None, sum_of_squares=3, conf_level=0.95,
+                 display_summary=True, table_decimals=None):
 
         if data is None:
             data = {}
@@ -321,8 +324,7 @@ class Anova(LinearModel):
         self._test_stat_name = "t"
         self._CI_LEVEL = conf_level
 
-        super().__init__(formula_like, data, conf_level=conf_level, solver_options=solver_options,
-                         table_decimals=table_decimals)
+        super().__init__(formula_like, data, conf_level=conf_level, table_decimals=table_decimals)
 
         self.__name__ = "Researchpy.ANOVA"
         self.ModelFit.model_type = self.__name__
@@ -390,25 +392,26 @@ class Anova(LinearModel):
 
         Parameters
         ----------
-        factor_effects : dict
-            Accumulator dictionary to append results into.
         data : DataFrame or dict
             Data for building design matrices.
         """
         previous_sse = self.ModelEffects.ss_total
         terms_to_include = []
 
-        for term in self._IV_design_info.term_names:
-            if term.strip().upper() == "INTERCEPT":
+        # Get term names from the formulaic ModelSpec
+        term_names = [str(t) for t in self.IV.model_spec.terms]
+
+        for term in term_names:
+            if term.strip() == "1" or term.strip().upper() == "INTERCEPT":
                 terms_to_include.append(term)
                 continue
 
             if term not in terms_to_include:
                 terms_to_include.append(term)
 
-            # Build design matrix for terms included so far
-            design_info = self._IV_design_info.subset(terms_to_include)
-            x = np.asarray(patsy.build_design_matrices([design_info], data))[0]
+            # Build design matrix for terms included so far using formulaic subset
+            formula_str = " + ".join(terms_to_include)
+            x = self.IV.model_spec.subset(formula_str).get_model_matrix(data).to_numpy()
 
             # Compute SSE for this cumulative model
             current_sse = self._compute_sse_from_design(x, self.DV)
@@ -417,9 +420,7 @@ class Anova(LinearModel):
             ss_factor = previous_sse - current_sse
 
             # Degrees of freedom for this factor
-            term_subset = self._IV_design_info.subset(term)
-            term_design = np.asarray(
-                patsy.build_design_matrices([term_subset], data))[0]
+            term_design = self.IV.model_spec.subset(term).get_model_matrix(data).to_numpy()
             df_factor = np.linalg.matrix_rank(term_design) - 1
 
             # Compute F, p-value, and effect sizes
@@ -441,22 +442,23 @@ class Anova(LinearModel):
 
         Parameters
         ----------
-        factor_effects : dict
-            Accumulator dictionary to append results into.
         data : DataFrame or dict
             Data for building design matrices.
         """
         # Use complete cases for Type II (consistent with original implementation)
         complete_data = data[~data.isna().any(axis=1)]
 
-        for current_term in self._IV_design_info.term_names:
-            if current_term.strip().upper() == "INTERCEPT":
+        # Get term names from the formulaic ModelSpec
+        term_names = [str(t) for t in self.IV.model_spec.terms]
+
+        for current_term in term_names:
+            if current_term.strip() == "1" or current_term.strip().upper() == "INTERCEPT":
                 continue
 
             # Build reduced model: all terms except those that contain current_term
-            terms_in_model = list(self._IV_design_info.term_names)
-            for term in self._IV_design_info.term_names:
-                if term.strip().upper() == "INTERCEPT":
+            terms_in_model = list(term_names)
+            for term in term_names:
+                if term.strip() == "1":
                     continue
                 if current_term in term:
                     terms_in_model.remove(term)
@@ -465,14 +467,12 @@ class Anova(LinearModel):
             compare_model = list(terms_in_model)
             compare_model.append(current_term)
 
-            # Build design matrices
-            design_reduced = self._IV_design_info.subset(terms_in_model)
-            x_reduced = np.asarray(patsy.build_design_matrices(
-                [design_reduced], complete_data))[0]
+            # Build design matrices using formulaic subset
+            formula_reduced = " + ".join(terms_in_model)
+            x_reduced = self.IV.model_spec.subset(formula_reduced).get_model_matrix(complete_data).to_numpy()
 
-            design_full = self._IV_design_info.subset(compare_model)
-            x_full = np.asarray(patsy.build_design_matrices(
-                [design_full], complete_data))[0]
+            formula_full = " + ".join(compare_model)
+            x_full = self.IV.model_spec.subset(formula_full).get_model_matrix(complete_data).to_numpy()
 
             # Compute SSE for both models
             sse_reduced = self._compute_sse_from_design(x_reduced, self.DV)
@@ -482,10 +482,8 @@ class Anova(LinearModel):
             ss_factor = sse_reduced - sse_full
 
             # Degrees of freedom for this factor
-            current_term_subset = self._IV_design_info.subset(current_term)
-            current_term_design = np.asarray(
-                patsy.build_design_matrices([current_term_subset], data))[0]
-            df_factor = np.linalg.matrix_rank(current_term_design) - 1
+            term_design = self.IV.model_spec.subset(current_term).get_model_matrix(data).to_numpy()
+            df_factor = np.linalg.matrix_rank(term_design) - 1
 
             # Compute F, p-value, and effect sizes
             stats = self._compute_factor_stats(ss_factor, df_factor)
@@ -508,35 +506,40 @@ class Anova(LinearModel):
 
         Parameters
         ----------
-        factor_effects : dict
-            Accumulator dictionary to append results into.
         data : DataFrame or dict
             Data for building design matrices.
         """
-        # Convert Treatment-coded terms to Sum-coded equivalents
-        the_terms_3 = self._build_type3_terms(self._IV_design_info.term_names)
+        # Get term names from the formulaic ModelSpec
+        term_names = [str(t) for t in self.IV.model_spec.terms]
 
-        # Re-fit the model using Sum coding
+        # Convert Treatment-coded terms to Sum-coded equivalents for formulaic
+        # In formulaic: C(x) with default Treatment → C(x, contr.sum) for Sum coding
+        the_terms_3 = self._build_type3_terms_formulaic(term_names)
+
+        # Re-fit the model using Sum coding via formulaic
         full_model_formula = (
-            self._DV_design_info.term_names[0]
+            self.ModelFit.dv_term_names[0]
             + " ~ "
-            + " + ".join(the_terms_3[1:])
+            + " + ".join(t for t in the_terms_3 if t != "1")
         )
-        y, x_full = patsy.dmatrices(full_model_formula, data, eval_env=1)
+        mm_full = formulaic.model_matrix(full_model_formula, data)
+        x_full_spec = mm_full.rhs.model_spec
+        x_full = mm_full.rhs.to_numpy()
+
+        # Get the Sum-coded term names from the new spec
+        sum_term_names = [str(t) for t in x_full_spec.terms]
 
         # For each term, compute SS by comparing full model to model-without-term
-        for current_term in the_terms_3:
-            if current_term.strip().upper() == "INTERCEPT":
+        for current_term in sum_term_names:
+            if current_term.strip() == "1" or current_term.strip().upper() == "INTERCEPT":
                 continue
 
             # Build the Sum-coded terms list for the reduced model (all terms minus current)
-            terms_in_model = list(the_terms_3)
-            terms_in_model.remove(current_term)
+            terms_in_model = [t for t in sum_term_names if t != current_term]
 
             # Build design matrix for reduced model
-            design_reduced = x_full.design_info.subset(terms_in_model)
-            x_reduced = np.asarray(patsy.build_design_matrices(
-                [design_reduced], data))[0]
+            formula_reduced = " + ".join(terms_in_model)
+            x_reduced = x_full_spec.subset(formula_reduced).get_model_matrix(data).to_numpy()
 
             # Compute SSE for reduced model
             sse_reduced = self._compute_sse_from_design(x_reduced, self.DV)
@@ -545,10 +548,8 @@ class Anova(LinearModel):
             ss_factor = sse_reduced - self.ModelEffects.ss_residual
 
             # Degrees of freedom for this factor
-            current_term_subset = x_full.design_info.subset(current_term)
-            current_term_design = np.asarray(
-                patsy.build_design_matrices([current_term_subset], data))[0]
-            df_factor = np.linalg.matrix_rank(current_term_design) - 1
+            term_design = x_full_spec.subset(current_term).get_model_matrix(data).to_numpy()
+            df_factor = np.linalg.matrix_rank(term_design) - 1
 
             # Compute F, p-value, and effect sizes
             stats = self._compute_factor_stats(ss_factor, df_factor)

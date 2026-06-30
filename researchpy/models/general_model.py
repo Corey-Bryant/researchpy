@@ -1,13 +1,13 @@
 import numpy as np
 
-from researchpy.models.base import CoreModel
+from researchpy.core.model import CoreModel
 from researchpy.containers import SolverOptions, ModelResults
 
 from researchpy.objective_functions.likelihood import neg_log_likelihood, gradient_neg_log_likelihood
 from researchpy.optimize.iterative_algorithms import scipy_minimize, newton_raphson
 from researchpy.models.postestimation import LikelihoodRatioTest
 
-from researchpy.predict import predict
+from researchpy.models.postestimation.predict import predict
 
 
 class GeneralModel(CoreModel):
@@ -17,14 +17,12 @@ class GeneralModel(CoreModel):
 
     """
 
-    def __init__(self, formula_like, data=None, matrix_type=1, conf_level=0.95,
-                 family="gaussian", link="normal", solver_options=None,
-                 table_decimals=None):
+    def __init__(self, formula_like, data=None, conf_level=0.95,
+                 family="gaussian", link="normal",
+                 solver_options=None, table_decimals=None):
 
         self.__name__ = "Researchpy.GeneralModel"
-
-        if data is None:
-            data = {}
+        if data is None: data = {}
 
         # Build SolverOptions: start with GeneralModel defaults, then overlay user input.
         base_defaults = SolverOptions(
@@ -45,9 +43,9 @@ class GeneralModel(CoreModel):
             resolved_solver_options = base_defaults.with_overrides(solver_options)
 
 
-        super().__init__(formula_like=formula_like, data=data, matrix_type=matrix_type, conf_level=conf_level,
-                         family=family, link=link, solver_options=resolved_solver_options,
-                         table_decimals=table_decimals)
+        super().__init__(formula_like=formula_like, data=data, conf_level=conf_level,
+                         family=family, link=link,
+                         solver_options=resolved_solver_options, table_decimals=table_decimals)
 
 
     def __initialize_betas(self, initial_betas=None, initial_betas_method=None):
@@ -86,8 +84,8 @@ class GeneralModel(CoreModel):
             IV=self.IV,
             DV=self.DV,
             solver_options=self.solver_options,
-            distribution_family=self._family,
-            link_function=self._link,
+            distribution_family=self.ModelFit.family,
+            link_function=self.ModelFit.link,
             tracker=self._OptimizationTracker
         )
 
@@ -99,8 +97,8 @@ class GeneralModel(CoreModel):
             IV=self.IV,
             DV=self.DV,
             solver_options=self.solver_options,
-            distribution_family=self._family,
-            link_function=self._link
+            distribution_family=self.ModelFit.family,
+            link_function=self.ModelFit.link
         )
 
 
@@ -240,7 +238,15 @@ class GeneralModel(CoreModel):
         return fit_statistics
 
 
-    def _get_from_child(self, key: str, **kwargs):
+    def _get_from_child(self, **kwargs):
+
+        raise NotImplementedError(
+                f"{type(self).__name__} must override _get_ModelResults() "
+                "to provide self.ModelResults."
+        )
+
+
+    def _get_from_child_bu(self, key: str, **kwargs):
         """
         Return LogisticRegression-specific data requested by the parent class.
 
@@ -334,7 +340,8 @@ class GeneralModel(CoreModel):
         # Build the fit statistics and coefficient results
         fit_statistics = self._get_fit_statistics(table_decimals=self._table_decimals)
 
-        table_from_child = self._get_from_child("additional_fit_stats", fit_statistics=fit_statistics)
+        #table_from_child = self._get_from_child("additional_fit_stats", fit_statistics=fit_statistics)
+        table_from_child = self._get_from_child(key="model_table")
 
         coefficients = self._get_coefficient_results(pretty_format=pretty_format,
                                                      table_decimals=self._table_decimals,
@@ -344,6 +351,13 @@ class GeneralModel(CoreModel):
             model_name=self._get_model_display_name(),
             fit_statistics=fit_statistics,
             model_table=None,  # MLE models have no SS decomposition
+            coefficients=coefficients,
+        )
+
+        self.ModelResults = ModelResults(
+            model_name=self._get_model_display_name(),
+            fit_statistics=fit_statistics,
+            model_table=table_from_child,  # MLE models have no SS decomposition
             coefficients=coefficients,
         )
 

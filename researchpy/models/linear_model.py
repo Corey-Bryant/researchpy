@@ -1,7 +1,7 @@
 from typing import Any
 from pandas import DataFrame
 
-from researchpy.models.base import CoreModel
+from researchpy.core.model import CoreModel
 from researchpy.containers import ModelResults, FactorEffects, SolverOptions
 from researchpy.utility import *
 
@@ -13,35 +13,13 @@ class LinearModel(CoreModel):
 
     """
 
-    def __init__(self, formula_like, data=None, matrix_type=1, conf_level=0.95,
-                 family="gaussian", link="normal", solver_options=None,
-                 table_decimals=None):
+    def __init__(self, formula_like, data=None, conf_level=0.95, table_decimals=None):
 
         self.FactorEffects = FactorEffects()
+        if data is None:  data = {}
 
-        if data is None:
-            data = {}
-
-        # Build SolverOptions: start with LinearModel OLS defaults, then overlay user input.
-        base_defaults = SolverOptions(
-            method="ols",
-            algorithm=None,
-            obj_function="numeric",
-            tol=1e-7,
-            max_iter=300,
-            display=True
-        )
-
-        if solver_options is None:
-            resolved_solver_options = base_defaults
-        elif isinstance(solver_options, SolverOptions):
-            resolved_solver_options = solver_options
-        else:
-            # User passed a dict — override base defaults with user values
-            resolved_solver_options = base_defaults.with_overrides(solver_options)
-
-        super().__init__(formula_like=formula_like, data=data, matrix_type=matrix_type, conf_level=conf_level,
-                         family=family, link=link, solver_options=resolved_solver_options,
+        super().__init__(formula_like=formula_like, data=data, conf_level=conf_level,
+                         family="gaussian", link="normal", solver_options=None,
                          table_decimals=table_decimals)
 
         self.__name__ = "Researchpy.LinearModel"

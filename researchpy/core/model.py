@@ -1,5 +1,6 @@
+
 import scipy.stats
-import formulaic
+from researchpy.core.matrix_design import DMatrix
 
 from researchpy.utility import *
 from researchpy.models.postestimation.predict import predict
@@ -14,7 +15,7 @@ from researchpy.optimize.trackers import OptimizationTracker
 # Base model class for regression models. This class is not meant to be used directly, but rather to be inherited by
 # specific regression model classes (e.g., OLS, Logistic, etc.). It contains common functionality and attributes that
 # are shared across different types of regression models.
-class CoreModel():
+class CoreModel(DMatrix):
     """
 
     This is the base -model- object for Researchpy. By default, missing
@@ -24,19 +25,6 @@ class CoreModel():
 
     """
 
-    @property
-    def CI_LEVEL(self):
-        return self._CI_LEVEL
-    @CI_LEVEL.setter
-    def CI_LEVEL(self, conf_level):
-        self._CI_LEVEL = float(conf_level)
-
-    @property
-    def conf_level(self):
-        return self._CI_LEVEL
-    @conf_level.setter
-    def conf_level(self, conf_level):
-        self._CI_LEVEL = float(conf_level)
 
     @property
     def obj_function(self):
@@ -45,32 +33,15 @@ class CoreModel():
     def obj_function(self, obj_function):
         self._obj_function = obj_function
 
-    def __init__(self, formula_like, data=None, matrix_type=1, conf_level=0.95,
+    def __init__(self, formula_like, data={}, conf_level=0.95,
                  family="gaussian", link="normal",
                  solver_options=None, table_decimals=None):
 
         self.__name__ = "Researchpy.CoreModel"
-
         self._beta_type = "coef"
 
-        if data is None:
-            data = {}
+        super().__init__(formula_like, data, output="numpy")
 
-        # Build design matrices using formulaic
-        # matrix_type = 1 includes intercept; matrix_type = 0 does not include the intercept
-        formula_str = formula_like
-        if matrix_type == 0:
-            formula_str = formula_like + " + 0"
-
-        mm = formulaic.model_matrix(formula_str, data)
-
-        # Store as numpy arrays for linear algebra pipeline
-        self.DV = mm.lhs.to_numpy()
-        self.IV = mm.rhs.to_numpy()
-
-        # Store ModelSpec objects (replaces patsy's design_info)
-        self._DV_model_spec = mm.lhs.model_spec
-        self._IV_model_spec = mm.rhs.model_spec
 
         # Build a SolverOptions dataclass instance.
         # Subclasses (LinearModel, GeneralModel) should resolve their own defaults
@@ -85,37 +56,30 @@ class CoreModel():
 
         self.obj_function = self.solver_options.obj_function
 
-        self.CI_LEVEL = conf_level
-        self.conf_level = conf_level
-
-        self.n, self.k = self.IV.shape
-
-        # Model design information
-        self.formula = formula_like
-        if not hasattr(self, "_test_stat_name"):
-            self._test_stat_name = "t" if family == "gaussian" else "z"
-        self._family = family
-        self._link = link
-        self._CI_LEVEL = conf_level
-
         # Initialize an optimization tracker instance for this model. This tracker can be used by optimization
         # algorithms to store and monitor the optimization process.
         self._OptimizationTracker = OptimizationTracker()
 
-        ## Design information from formulaic ModelSpec ##
-        self.DV_name = list(mm.lhs.columns)[0]
+        # Model design information
+        if not hasattr(self, "_test_stat_name"):
+            self._test_stat_name = "t" if family == "gaussian" else "z"
+
+        self.n, self.k = self.IV.shape
 
         # New dataclass-based term/column mapping (from formulaic ModelSpec)
-        self._model_terms = ModelTerms.from_model_spec(self._IV_model_spec)
+        self._model_terms = ModelTerms.from_model_spec(self.IV.model_spec)
 
-        # ModelFit dataclass stores the model design information and fit parameters
+        # Will be refractoring to use containers to clean up codebase and make it more modular. This ModelFit
+        # dataclass will store the model design information and fit parameters that are common across different
+        # regression models. By centralizing this information in a dataclass, it allows for cleaner code and easier
+        # maintenance, as well as providing a standardized way to access model fit information across different model types.
         self.ModelFit = ModelFit(
             formula = formula_like,
             family = family,
             link = link,
             solver_method = self.solver_options.method,
             ci_level = conf_level,
-            dv_term_names = list(mm.lhs.columns),
+            dv_term_names = list(self.DV.model_spec.column_names),
             iv_term_names = list(self._model_terms.column_map.keys())
         )
 
@@ -128,24 +92,11 @@ class CoreModel():
 
         self.CoefResults = CoefResults()
         self.CoefResults.term = self._model_terms.column_map.keys()
-        #self.CoefResults.test_stat_name = "t" if self.ModelFit.family == "gaussian" else "z"
-
-        ## Creating variable table information
-        if not hasattr(self, "regression_table_info"):
-            self.regression_table_info = {
-                self.DV_name: [],
-                "Coef.": [],
-                "Std. Err.": [],
-                f"{self._test_stat_name}": [],
-                "p-value": [],
-                f"{int(self.CI_LEVEL * 100)}% Conf. Interval": []
-            }
 
 
-        # Checking to see if the `self._table_decimals` attribute is defined. If it's not then create it.
-        # This is used to specify the number of decimal places to round to for different statistics in the summary
-        # table. By defining it in the base class, it allows subclasses to override or update the decimal settings as
-        # needed without having to redefine the entire dictionary.
+
+        # Checking to see if the `self._table_decimals` attribute is defined, if it's not then create it.
+        # This is used to specify the number of decimal places to round to for different statistics in the summary table.
         if not hasattr(self, "_table_decimals"):
             self._table_decimals = {
                 "Coef.": 2, "Std. Err.": 3, "test_stat": 4, "test_stat_p": 4, "CI": 2,
@@ -258,7 +209,7 @@ class CoreModel():
         for beta, se in zip(self.CoefResults.betas, self.CoefResults.std_error):
 
             try:
-                lower, upper = scipy.stats.norm.interval(self._CI_LEVEL, loc=beta, scale=se)
+                lower, upper = scipy.stats.norm.interval(self.ModelFit.ci_level, loc=beta, scale=se)
                 conf_int_lower.append(float(lower))
                 conf_int_upper.append(float(upper))
 
@@ -723,7 +674,7 @@ class CoreModel():
             beta_col = "Odds Ratio"
 
         test_stat_label = self._test_stat_name
-        ci_col_name = f"{int(self.CI_LEVEL * 100)}% Conf. Interval"
+        ci_col_name = f"{int(self.ModelFit.ci_level * 100)}% Conf. Interval"
 
         # ---- Format CI list column into "[lower, upper]" strings --------
         if ci_col_name in table.columns:
@@ -848,3 +799,4 @@ class CoreModel():
             except (ValueError, TypeError):
                 return str(val)
         return _f
+

@@ -656,7 +656,7 @@ class ModelTerms:
     # ------------------------------------------------------------------ #
     @classmethod
     def from_formula(cls, formula: str, include_intercept: bool = False) -> "ModelTerms":
-        """Parse a formula string into ``ModelTerms`` using Patsy's formula parser.
+        """Parse a formula string into ``ModelTerms`` using formulaic's formula parser.
 
         This is a lightweight parse that extracts structural information
         (DV names, term names, interaction flags, factor flags) WITHOUT
@@ -665,7 +665,7 @@ class ModelTerms:
         Parameters
         ----------
         formula : str
-            Patsy-style formula string (e.g., ``"y ~ C(x) + C(a):C(b)"``).
+            Wilkinson-style formula string (e.g., ``"y ~ C(x) + C(a):C(b)"``).
         include_intercept : bool, optional
             Whether to include the implicit intercept term. Default is False
             (intercept is excluded since descriptive stats don't use it).
@@ -698,7 +698,7 @@ class ModelTerms:
         >>> mt[1].is_factor
         [True, True]
         """
-        import patsy
+        import formulaic
 
         if "~" not in formula:
             raise ValueError(
@@ -706,85 +706,98 @@ class ModelTerms:
                 f"variables. Got: '{formula}'. Example: 'y ~ C(x)'."
             )
 
-        desc = patsy.ModelDesc.from_formula(formula)
+        parsed = formulaic.Formula(formula)
 
         # --- Extract DV names from LHS ---
         dv_names = []
-        for lhs_term in desc.lhs_termlist:
+        for lhs_term in parsed.lhs:
             for factor in lhs_term.factors:
-                dv_names.append(factor.code)
+                factor_str = str(factor)
+                if factor_str != "1":
+                    dv_names.append(factor_str)
 
         # --- Build Term objects from RHS ---
         terms = []
-        for rhs_term in desc.rhs_termlist:
-            # Skip intercept (empty factors list) unless requested
-            if not rhs_term.factors:
+        for rhs_term in parsed.rhs:
+            # Build the term string from factors
+            factors_strs = [str(f) for f in rhs_term.factors]
+
+            # Skip intercept (factor is "1") unless requested
+            if factors_strs == ["1"]:
                 if include_intercept:
                     terms.append(Term(term="Intercept"))
                 continue
 
-            # Build the term string in Patsy notation: "C(x):C(k)" or "z"
-            term_str = ":".join(f.code for f in rhs_term.factors)
+            # Build the term string: "C(x):C(k)" or "z"
+            term_str = ":".join(factors_strs)
 
             # Term.__post_init__ handles: name, is_interaction, is_factor
             term_obj = Term(term=term_str)
             terms.append(term_obj)
 
         return cls(terms=terms, dv=dv_names)
-    @classmethod
-    def from_design_info(cls, design_info) -> "ModelTerms":
-        """Build ``ModelTerms`` from a Patsy ``DesignInfo`` object.
 
-        Uses ``design_info.term_name_slices`` to reliably map each
-        column name to its parent term, and ``design_info.factor_infos``
-        to determine all category levels and reference categories for
-        factor terms.
+
+    @classmethod
+    def from_model_spec(cls, model_spec) -> "ModelTerms":
+        """Build ``ModelTerms`` from a formulaic ``ModelSpec`` object.
+
+        Uses ``model_spec.structure`` to reliably map each column name to
+        its parent term, and ``model_spec.encoder_state`` to determine all
+        category levels and reference categories for factor terms.
 
         Parameters
         ----------
-        design_info : patsy.DesignInfo
-            Typically ``IV.design_info`` from a Patsy design matrix.
+        model_spec : formulaic.ModelSpec
+            Typically ``mm.rhs.model_spec`` from a formulaic DMatrix.
 
         Returns
         -------
         ModelTerms
         """
-        term_names = design_info.term_names
-        column_names = list(design_info.column_names)
-        term_slices = design_info.term_name_slices
+        structure = model_spec.structure
+        encoder_state = model_spec.encoder_state
 
-        # Map factor expression code → all categorical levels (as strings)
+        # Build a lookup: factor expression string → (kind, categories)
+        # encoder_state maps factor_expr → (Kind, state_dict)
         factor_cats = {}
-        for factor, finfo in design_info.factor_infos.items():
-            if finfo.type == "categorical" and finfo.categories is not None:
-                factor_cats[factor.code] = [str(c) for c in finfo.categories]
+        for factor_expr, (kind, state) in encoder_state.items():
+            factor_str = str(factor_expr)
+            if hasattr(kind, 'value') and kind.value == 'categorical':
+                categories = state.get('categories', None)
+                if categories is not None:
+                    factor_cats[factor_str] = [str(c) for c in categories]
 
         terms = []
-        for patsy_term, t_name in zip(design_info.terms, term_names):
-            slc = term_slices[t_name]
-            t_columns = column_names[slc]
+        for encoded_term in structure:
+            term_str = str(encoded_term.term)
+            t_columns = list(encoded_term.columns)
+
+            # Skip intercept — represented as term "1" with column "Intercept"
+            if term_str == "1":
+                term_obj = Term(term="Intercept", columns=t_columns)
+                terms.append(term_obj)
+                continue
 
             # Build the Term (columns_cleaned is computed in __post_init__)
-            term_obj = Term(term=t_name, columns=t_columns)
+            term_obj = Term(term=term_str, columns=t_columns)
 
             # Determine levels and reference for factor terms
-            cat_factors = [f for f in patsy_term.factors
-                           if f.code in factor_cats]
+            # Get sub-parts of the term (for interactions like "C(group):C(drug)")
+            sub_parts = term_str.split(":")
 
-            if cat_factors:
-                sub_parts = t_name.split(":")
+            # Identify which sub-parts are categorical
+            cat_sub_parts = [p for p in sub_parts if p in factor_cats]
+
+            if cat_sub_parts:
                 is_intx = len(sub_parts) > 1
-
-                # Build a quick lookup: factor_code → categories
-                code_to_cats = {f.code: factor_cats[f.code]
-                                for f in cat_factors}
 
                 part_levels = []
                 part_refs = []
 
                 for i, sub in enumerate(sub_parts):
-                    if sub in code_to_cats:
-                        all_cats = code_to_cats[sub]
+                    if sub in factor_cats:
+                        all_cats = factor_cats[sub]
 
                         # Extract the levels that actually appear in
                         # columns_cleaned at position i
@@ -819,6 +832,29 @@ class ModelTerms:
 
         return cls(terms=terms)
 
+
+    @classmethod
+    def from_design_info(cls, design_info) -> "ModelTerms":
+        """Build ``ModelTerms`` from a formulaic ``ModelSpec`` object.
+
+        .. deprecated::
+            Use ``from_model_spec()`` instead. This method is provided
+            for backward compatibility during the patsy→formulaic migration.
+
+        Parameters
+        ----------
+        design_info : formulaic.ModelSpec
+            A formulaic ModelSpec object (named ``design_info`` for
+            backward compatibility with code that previously passed
+            patsy DesignInfo objects).
+
+        Returns
+        -------
+        ModelTerms
+        """
+        return cls.from_model_spec(design_info)
+
+
     # ------------------------------------------------------------------ #
     #  Mapping properties                                                  #
     # ------------------------------------------------------------------ #
@@ -829,6 +865,7 @@ class ModelTerms:
         Example: ``{"C(drug, Treatment(2))": "drug", "disease": "disease"}``
         """
         return {t.term: t.name for t in self.terms}
+
 
     @property
     def column_map(self) -> dict:

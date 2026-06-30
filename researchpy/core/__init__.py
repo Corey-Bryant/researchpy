@@ -12,7 +12,8 @@ Usage:
 """
 
 from .data_utils import as_array, validate_array
-from .matrix_design import DesignMatrices, DesignMatrix
+from researchpy.core.matrix_design import DesignMatrices, DesignMatrix, DMatrix
+from researchpy.core.model import CoreModel as BaseModel
 from .spec import ComputeSpec, resolve
 from .matrix_engine import build_indicator_matrix, grouped_statistic, grouped_statistic_pivot
 
@@ -23,6 +24,8 @@ __all__ = [
     'validate_array',
     'DesignMatrices',
     'DesignMatrix',
+    'DMatrix',
+    'BaseModel',
     'ComputeSpec',
     'resolve',
     'build_indicator_matrix',

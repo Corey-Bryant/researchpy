@@ -7,7 +7,7 @@ using the ordinary least squares method.
 """
 
 from researchpy.models.linear_model import LinearModel
-from researchpy.predict import predict
+from researchpy.models.postestimation.predict import predict
 
 
 class Regress(LinearModel):
@@ -68,16 +68,14 @@ class Regress(LinearModel):
     Anova : Analysis of Variance (inherits from OLS)
     """
 
-    def __init__(self, formula_like, data=None, conf_level=0.95, display_summary=True,
-                 solver_options=None,
-                 return_type="Dictionary", na_rep='', pretty_format=True, table_decimals=None):
+    def __init__(self, formula_like, data=None, conf_level=0.95,
+                 table_decimals=None,
+                 display_summary=True, return_type="Dictionary",
+                 na_rep='', pretty_format=True,):
 
         self._test_stat_name = "t"
-        self._CI_LEVEL = conf_level
 
-        super().__init__(formula_like, data, matrix_type=1, conf_level=conf_level,
-                         solver_options=solver_options, family="gaussian", link="normal",
-                         table_decimals=table_decimals)
+        super().__init__(formula_like, data, conf_level=conf_level, table_decimals=table_decimals)
 
         self.__name__ = "Researchpy.Regress"
         self.ModelFit.model = self.__name__

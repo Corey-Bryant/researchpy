@@ -30,10 +30,22 @@ Usage:
 """
 
 from researchpy.models.postestimation.likelihood_ratio import LikelihoodRatioTest, LRTest
+from researchpy.models.postestimation.predict import (
+    predict, leverage, studentized_residuals, standardized_residuals,
+    _compute_hat_matrix, residuals, predict_y
+)
+
 
 # Define what gets exported with "from researchpy.models.postestimation import *"
 __all__ = [
     "LikelihoodRatioTest",
     "LRTest",
+    "predict",
+    "leverage",
+    "studentized_residuals",
+    "standardized_residuals",
+    "_compute_hat_matrix",
+    "residuals",
+    "predict_y"
 ]
 

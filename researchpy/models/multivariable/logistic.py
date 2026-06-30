@@ -5,7 +5,7 @@ from researchpy.models.general_model import GeneralModel
 from researchpy.containers import ModelResults, SolverOptions
 from researchpy.utility import *
 
-from researchpy.predict import predict
+from researchpy.models.postestimation.predict import predict
 
 
 class LogisticRegression(GeneralModel):
@@ -51,12 +51,13 @@ class LogisticRegression(GeneralModel):
     Logistic : Alias for LogisticRegression
     """
 
-    def __init__(self, formula_like, data=None, display_summary=True,
-                 report_as="or", solver_options=None,
+    def __init__(self, formula_like, data=None, conf_level=0.95,
+                 report_as="or", display_summary=True,
+                 solver_options=None, table_decimals=None,
                  initial_betas=None, initial_betas_method="ols"):
 
-        if data is None:
-            data = {}
+        if data is None: data = {}
+        self._test_stat_name = "z"
 
         # Build SolverOptions: start with LogisticRegression-specific defaults, then overlay user input.
         base_defaults = SolverOptions(
@@ -69,7 +70,6 @@ class LogisticRegression(GeneralModel):
             regularization=None,
             alpha=0.0
         )
-
         if solver_options is None:
             resolved_solver_options = base_defaults
         elif isinstance(solver_options, SolverOptions):
@@ -78,15 +78,12 @@ class LogisticRegression(GeneralModel):
             # User passed a dict — override base defaults with user values
             resolved_solver_options = base_defaults.with_overrides(solver_options)
 
-        self._test_stat_name = "z"
 
-        super().__init__(formula_like, data, matrix_type=1,
-                         solver_options=resolved_solver_options,
-                         family="binomial", link="logit")
+        super().__init__(formula_like, data, conf_level=conf_level,
+                         family="binomial", link="logit",
+                         solver_options=resolved_solver_options, table_decimals=table_decimals)
 
         self.__name__ = "Researchpy.LogisticRegression"
-
-
 
         # Initializing betas
         self._GeneralModel__initialize_betas(initial_betas=initial_betas, initial_betas_method=initial_betas_method)
@@ -106,7 +103,7 @@ class LogisticRegression(GeneralModel):
 
 
 
-    def _get_from_child(self, key: str, **kwargs):
+    def _get_from_child(self, **kwargs):
         """
         Return LogisticRegression-specific data requested by the parent class.
 
@@ -126,16 +123,28 @@ class LogisticRegression(GeneralModel):
         object
             The requested value, or ``None`` for unrecognized keys.
         """
+        key = kwargs.get("key", "additional_fit_stats")
+
         if key == "default_transform":
             return np.exp
+
         if key == "test_stat_name":
             return "z"
+
         if key == "additional_fit_stats":
             return {}
+
+        if key == "model_table":
+            return {"": [self._get_model_display_name(),
+                         f"Log likelihood = {self.FitStatistics.log_likelihood:.4f}"]}
+
+        if key == "df_model_table":
+            return pd.DataFrame.from_dict({"": [self.ModelResults.model_name,
+                                                f"Log likelihood = {self.FitStatistics.log_likelihood:.4f}"]})
         if key == "report_options":
             return {"report_as": "or", "beta_type": "odds ratio"}
 
-        return super()._get_from_child(key, **kwargs)
+        #return super()._get_from_child(key, **kwargs)
 
 
     def _compute_statistics(self):
@@ -363,8 +372,12 @@ class LogisticRegression(GeneralModel):
 
 
         # Returning the classification table as the "model_table" component of ModelResults for logistic regression
+        #classification_table, classification_stats = self.classification_table(return_type="Dictionary")
+        #self.ModelResults.model_table = (classification_table, classification_stats)
+
         classification_table, classification_stats = self.classification_table(return_type="Dictionary")
-        self.ModelResults.model_table = (classification_table, classification_stats)
+        self.ModelResults.details = {"Classification table": classification_table,
+                                     "Classification stats": classification_stats}
 
 
         # Rename "Coef." column to "Odds Ratio" if reporting odds ratios
@@ -384,7 +397,7 @@ class LogisticRegression(GeneralModel):
                 }
 
 
-
+        '''
         if return_type.lower() in ["dataframe", "df", "pandas.dataframe", "pd.dataframe", ]:
             classification_table = pd.DataFrame(classification_table).set_index("Classified")
             classification_stats = pd.DataFrame(classification_stats)
@@ -395,6 +408,15 @@ class LogisticRegression(GeneralModel):
 
         else:
             return mr.fit_statistics, (classification_table, classification_stats), mr.coefficients
+        '''
+
+        if return_type.lower() in ["dataframe", "df", "pandas.dataframe", "pd.dataframe", ]:
+            return (self.ModelResults.as_dataframe("fit_statistics", mr.fit_statistics),
+                    self.ModelResults.as_dataframe("model_table", mr.model_table),
+                    self.ModelResults.as_dataframe("coefficients", mr.coefficients) )
+
+        else:
+            return mr.fit_statistics, mr.model_table, mr.coefficients
 
 
 

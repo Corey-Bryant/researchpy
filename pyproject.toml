@@ -17,12 +17,13 @@ classifiers = [
 ]
 keywords = ["researchpy", "statistics"]
 dependencies = [
-    'scipy',
-    'numpy',
-    'pandas',
-    'statsmodels',
-    'patsy',
+    'scipy>=1.17.1',
+    'numpy>=2.4.2',
+    'pandas>=3.0.1',
+    'statsmodels>=0.14.0',
+    'patsy>=1.0.2',
     "ipykernel>=6.16.2",
+    'formulaic>=1.2.2',
 ]
 
 
