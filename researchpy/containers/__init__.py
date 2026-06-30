@@ -19,6 +19,5 @@ __all__ = [
     'TestResults',
     'Term',
     'ModelTerms',
-    'SolverOptions'
-
+    'SolverOptions',
 ]

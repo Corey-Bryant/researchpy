@@ -28,9 +28,11 @@ from researchpy.descriptive import (
     confidence_interval,
     skewness,
     kurtosis,
-    SummaryResult,
     summarize,
 )
+from researchpy.containers import SummaryResult
+
+
 
 
 # ---------------------------------------------------------------------------

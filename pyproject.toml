@@ -16,7 +16,14 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 keywords = ["researchpy", "statistics"]
-dependencies = ['scipy', 'numpy', 'pandas', 'statsmodels', 'patsy']
+dependencies = [
+    'scipy',
+    'numpy',
+    'pandas',
+    'statsmodels',
+    'patsy',
+    "ipykernel>=6.16.2",
+]
 
 
 [project.urls]

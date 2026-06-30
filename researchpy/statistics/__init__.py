@@ -23,8 +23,9 @@ from .dispersion import variance, standard_deviation, standard_error, value_rang
 from .intervals import confidence_interval
 from .shape import skewness, kurtosis
 from .categorical import n_unique, value_counts, proportions, cumulative_proportions, tabulate
-from ._dispatcher import summarize
-from ..containers.univariate import SummaryResult
+from ._dispatcher import estable
+
+
 
 
 __all__ = [
@@ -57,8 +58,7 @@ __all__ = [
     "cumulative_proportions",
     "tabulate",
     # Result container
-    "SummaryResult",
     # Dispatcher
-    "summarize",
+    "estable",
 ]
 

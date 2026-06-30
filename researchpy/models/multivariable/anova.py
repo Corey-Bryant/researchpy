@@ -15,7 +15,8 @@ import pandas as pd
 from pandas import DataFrame
 
 from researchpy.models.linear_model import LinearModel
-from researchpy.core.containerclasses import ModelResults, FactorEffects
+from researchpy.containers import ModelResults
+from researchpy.containers import FactorEffects
 from researchpy.utility import as_numeric
 
 

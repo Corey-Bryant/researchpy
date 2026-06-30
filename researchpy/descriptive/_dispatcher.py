@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Union
 import numpy
 import pandas
 
-from .containers import SummaryResult
+from ..containers.univariate import SummaryResult
 from ..core.data_utils import validate_array
 from .observation import n_obs, n_missing, percent_missing
 from .central_tendency import mean, median, mode, quartiles, iqr

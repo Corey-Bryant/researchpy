@@ -27,7 +27,7 @@ Or attribute access::
 
 from __future__ import annotations
 
-
+#from core.containerclasses import CoreDataclass
 from .base import CoreDataclass
 from dataclasses import dataclass, field, fields
 from typing import Union, Any, Dict, Optional
@@ -170,7 +170,7 @@ class SolverOptions(CoreDataclass):
         SolverOptions
             A new instance with the overrides applied.
         """
-        from containers import replace as _replace
+        from dataclasses import replace as _replace
         valid_keys = {f.name for f in fields(self)}
         filtered = {k: v for k, v in overrides.items() if k in valid_keys}
         return _replace(self, **filtered)
@@ -867,3 +867,4 @@ class ModelTerms:
                          f"(factor={t.is_factor}, intx={t.is_interaction}, "
                          f"cols={len(t.columns)})")
         return "\n".join(lines)
+

@@ -4,7 +4,7 @@ import patsy
 
 from researchpy.utility import *
 from researchpy.predict import predict
-from researchpy.core.containerclasses import ModelFit, FitStatistics, ModelEffects, CoefResults, ModelTerms, SolverOptions
+from researchpy.containers import ModelFit, FitStatistics, ModelEffects, CoefResults, ModelTerms, SolverOptions
 
 from researchpy.optimize.trackers import OptimizationTracker
 

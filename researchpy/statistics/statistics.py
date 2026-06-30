@@ -6,11 +6,14 @@ Routes computation based on input type (Series, DataFrame, GroupBy) and
 delegates to the individual statistic modules.
 """
 
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 
 import numpy
 import pandas
+ 
 
+#from ..containers.base import DesignInfo, EstimateResults
 from ..containers.univariate import SummaryResult
 from ..core.data_utils import validate_array
 from .observation import n_obs, n_missing, percent_missing
@@ -52,10 +55,6 @@ _STAT_REGISTRY: Dict[str, Any] = {
 
 # Default stats when none are specified
 _DEFAULT_STATS = ["N", "Mean", "Median", "Variance", "SD", "SE", "CI"]
-
-
- 
-
 
 
 
@@ -218,6 +217,17 @@ def _compute_for_groupby(
                 rows.append(row)
 
     return pandas.DataFrame(rows)
+
+
+'''
+class Estimate(DesignInfo, EstimateResults):
+
+    def __init__(self, formula_like: Optional[str]=None,
+                 data: Union[pandas.Series, pandas.DataFrame, numpy.ndarray, list]=None,
+                 ci_level=0.95):
+        ...
+'''
+
 
 
 def summarize(data: Any, name: Optional[str] = None, stats: Optional[List[str]] = None, ci_level: float = 0.95,

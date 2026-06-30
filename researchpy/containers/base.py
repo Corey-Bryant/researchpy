@@ -106,7 +106,7 @@ class CoreDataclass:
 
 
 
-
+'''
 class DesignInfo():
     """
     This is the base -model- object for Researchpy. By default, missing
@@ -258,12 +258,6 @@ class DesignInfo():
 
 
 
-
-
-
-
-
-
 @dataclass
 class EstimateResults(CoreDataclass):
     """Container for results of a statistical estimation.
@@ -322,7 +316,7 @@ class EstimateResults(CoreDataclass):
         result.update(self.statistics)
 
         return result
-
+'''
 
 
 @dataclass

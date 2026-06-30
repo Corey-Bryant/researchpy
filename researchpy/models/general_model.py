@@ -1,7 +1,7 @@
 import numpy as np
 
 from researchpy.models.base import CoreModel
-from researchpy.core.containerclasses import SolverOptions, ModelResults
+from researchpy.containers import SolverOptions, ModelResults
 
 from researchpy.objective_functions.likelihood import neg_log_likelihood, gradient_neg_log_likelihood
 from researchpy.optimize.iterative_algorithms import scipy_minimize, newton_raphson

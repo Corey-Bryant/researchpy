@@ -2,7 +2,7 @@ from scipy.stats import norm
 from scipy.special import expit
 
 from researchpy.models.general_model import GeneralModel
-from researchpy.core.containerclasses import ModelResults, SolverOptions
+from researchpy.containers import ModelResults, SolverOptions
 from researchpy.utility import *
 
 from researchpy.predict import predict

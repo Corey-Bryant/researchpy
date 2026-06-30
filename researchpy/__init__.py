@@ -23,6 +23,10 @@ from .models.multivariable import Regress, LinearRegression, LM, Anova, ANOVA, L
 from .descriptive import summarize as summarize_new
 from . import descriptive
 
+# Statistical summary subpackage
+#from .statistics import estable
+from .statistics import *
+
 # Dataset and Dataset Importers
 from . import datasets
 

@@ -23,11 +23,9 @@ import numpy as np
 import pandas as pd
 
 
-def build_indicator_matrix(
-    data: pd.DataFrame,
-    groups: List[str],
-    interactions: Optional[List[Tuple[str, ...]]] = None,
-) -> Tuple[np.ndarray, List[str]]:
+def build_indicator_matrix(data: pd.DataFrame,
+                           groups: List[str],
+                           ) -> Tuple[np.ndarray, List[str], List[List[str]]]:
     """Build a full indicator (one-hot) matrix for grouping structure.
 
     Creates a dense n × k matrix where each column corresponds to a unique
@@ -40,11 +38,6 @@ def build_indicator_matrix(
         DataFrame containing the grouping columns.
     groups : list of str
         Column names to use as grouping factors.
-    interactions : list of tuple of str, optional
-        Interaction terms. If provided, builds cell indicators for each
-        unique combination of the interacted variables.
-        If None, builds a simple one-way indicator for each group crossed
-        (i.e., treats groups as a single combined factor).
 
     Returns
     -------
@@ -56,37 +49,25 @@ def build_indicator_matrix(
         Human-readable labels for each column (cell) in the indicator matrix.
         For single factors: the level values (e.g., ['a', 'b', 'c']).
         For interactions: joined level values (e.g., ['a:low', 'a:high', ...]).
+    cell_components : list of list of str
+        For each cell, the individual level values per group variable.
+        E.g., for groups=['x','k']: [['a','low'], ['a','high'], ['b','low'], ...]
+        For single group: [['a'], ['b'], ['c']]
 
     Examples
     --------
     >>> import pandas as pd
     >>> df = pd.DataFrame({'x': ['a', 'b', 'a', 'b'], 'y': [1, 2, 3, 4]})
-    >>> X, labels = build_indicator_matrix(df, groups=['x'])
+    >>> X, labels, components = build_indicator_matrix(df, groups=['x'])
     >>> labels
     ['a', 'b']
-    >>> X
-    array([[1., 0.],
-           [0., 1.],
-           [1., 0.],
-           [0., 1.]])
-
-    >>> df = pd.DataFrame({'g': ['a','a','b','b'], 'd': ['x','y','x','y'], 'v': [1,2,3,4]})
-    >>> X, labels = build_indicator_matrix(df, groups=['g', 'd'], interactions=[('g', 'd')])
-    >>> labels
-    ['a:x', 'a:y', 'b:x', 'b:y']
+    >>> components
+    [['a'], ['b']]
     """
     n = len(data)
 
-    if interactions:
-        # Interaction: build cells from the combined levels of interacted variables
-        # Use the first (and typically only) interaction tuple
-        # For multiple interaction terms, we'd need to handle separately,
-        # but for grouped descriptive stats there's usually one grouping structure.
-        interaction_vars = interactions[0]
-        cell_series = _build_cell_series(data, interaction_vars)
-    else:
-        # Simple grouping: cross all group variables into a single factor
-        cell_series = _build_cell_series(data, groups)
+    # Build combined cell series
+    cell_series = _build_cell_series(data, groups)
 
     # Get unique cells (sorted for deterministic ordering)
     unique_cells = np.sort(cell_series.unique())
@@ -100,7 +81,13 @@ def build_indicator_matrix(
     indicator_matrix = np.zeros((n, n_cells), dtype=np.float64)
     indicator_matrix[np.arange(n), codes] = 1.0
 
-    return indicator_matrix, cell_labels
+    # Build cell components (split labels back into per-group values)
+    if len(groups) == 1:
+        cell_components = [[label] for label in cell_labels]
+    else:
+        cell_components = [label.split(":") for label in cell_labels]
+
+    return indicator_matrix, cell_labels, cell_components
 
 
 def _build_cell_series(data: pd.DataFrame, variables: Union[List[str], Tuple[str, ...]]) -> pd.Series:
@@ -127,13 +114,11 @@ def _build_cell_series(data: pd.DataFrame, variables: Union[List[str], Tuple[str
         return parts[0].str.cat(parts[1:], sep=":")
 
 
-def grouped_statistic(
-    data: pd.DataFrame,
-    dv: str,
-    groups: List[str],
-    stat_func: str = "mean",
-    interactions: Optional[List[Tuple[str, ...]]] = None,
-) -> pd.DataFrame:
+def grouped_statistic(data: pd.DataFrame,
+                      dv: str,
+                      groups: List[str],
+                      stat_func: str = "mean",
+                      ) -> pd.DataFrame:
     """Compute a grouped statistic using indicator matrix arithmetic.
 
     This is the engine that powers grouped descriptive stats. Instead of
@@ -150,24 +135,23 @@ def grouped_statistic(
         Grouping variable column names.
     stat_func : str
         Statistic to compute. One of: "mean", "sum", "count", "variance", "sd", "se".
-    interactions : list of tuple of str, optional
-        Interaction terms for cell-level grouping.
 
     Returns
     -------
     pd.DataFrame
-        DataFrame with one row per group/cell, columns for group labels and the statistic.
+        DataFrame with one column per group variable, plus the statistic column.
+        Uses actual group variable names (not generic "Group").
 
     Examples
     --------
     >>> df = pd.DataFrame({'y': [1,2,3,4,5,6], 'g': ['a','a','b','b','c','c']})
     >>> grouped_statistic(df, dv='y', groups=['g'], stat_func='mean')
-      Group  Mean
-    0     a   1.5
-    1     b   3.5
-    2     c   5.5
+       g  Mean
+    0  a   1.5
+    1  b   3.5
+    2  c   5.5
     """
-    X, cell_labels = build_indicator_matrix(data, groups, interactions)
+    X, cell_labels, cell_components = build_indicator_matrix(data, groups)
     values = data[dv].to_numpy(dtype=np.float64, na_value=np.nan)
 
     # Mask NaN values: zero them out in both X and values for correct arithmetic
@@ -191,22 +175,17 @@ def grouped_statistic(
     elif stat_func == "sum":
         result_values = sums
     elif stat_func == "mean":
-        # Avoid division by zero for empty groups
         with np.errstate(divide='ignore', invalid='ignore'):
             result_values = np.where(counts > 0, sums / counts, np.nan)
     elif stat_func == "variance":
-        # Compute group means first
         with np.errstate(divide='ignore', invalid='ignore'):
             means = np.where(counts > 0, sums / counts, 0.0)
-        # Expand means back to observation level: (n,) array of each obs's group mean
         obs_group_means = X_clean @ means
-        # Squared deviations
         sq_devs = np.where(nan_mask, 0.0, (values - obs_group_means) ** 2)
         ss = X_clean.T @ sq_devs
         with np.errstate(divide='ignore', invalid='ignore'):
             result_values = np.where(counts > 1, ss / (counts - 1), np.nan)
     elif stat_func == "sd":
-        # Standard deviation = sqrt(variance)
         with np.errstate(divide='ignore', invalid='ignore'):
             means = np.where(counts > 0, sums / counts, 0.0)
         obs_group_means = X_clean @ means
@@ -216,7 +195,6 @@ def grouped_statistic(
             variance = np.where(counts > 1, ss / (counts - 1), np.nan)
         result_values = np.sqrt(variance)
     elif stat_func == "se":
-        # Standard error = sd / sqrt(n)
         with np.errstate(divide='ignore', invalid='ignore'):
             means = np.where(counts > 0, sums / counts, 0.0)
         obs_group_means = X_clean @ means
@@ -231,7 +209,7 @@ def grouped_statistic(
             f"Supported: 'mean', 'sum', 'count', 'variance', 'sd', 'se'."
         )
 
-    # Format output
+    # Format output with actual group variable names
     stat_label = {
         "mean": "Mean", "sum": "Sum", "count": "N",
         "variance": "Variance", "sd": "SD", "se": "SE",
@@ -241,10 +219,76 @@ def grouped_statistic(
     if stat_func == "count":
         result_values = result_values.astype(int)
 
-    result_df = pd.DataFrame({
-        "Group": cell_labels,
-        stat_label: result_values,
-    })
+    # Build result DataFrame with separate columns per group variable
+    result_dict = {}
+    for i, group_name in enumerate(groups):
+        result_dict[group_name] = [comp[i] for comp in cell_components]
 
-    return result_df
+    result_dict[stat_label] = result_values
 
+    return pd.DataFrame(result_dict)
+
+
+def grouped_statistic_pivot(data: pd.DataFrame,
+                            dv: str,
+                            by: List[str],
+                            over: List[str],
+                            stat_func: str = "mean",
+                            ) -> pd.DataFrame:
+    """Compute a grouped statistic and return as a pivot table.
+
+    Rows are indexed by ``by`` variable levels, columns by ``over`` variable levels.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Source data.
+    dv : str
+        Dependent variable column name (must be numeric).
+    by : list of str
+        Row grouping variable(s).
+    over : list of str
+        Column grouping variable(s).
+    stat_func : str
+        Statistic to compute. One of: "mean", "sum", "count", "variance", "sd", "se".
+
+    Returns
+    -------
+    pd.DataFrame
+        Pivot table with row index from ``by`` levels and column index
+        from ``over`` levels. Uses MultiIndex where appropriate.
+
+    Examples
+    --------
+    >>> df = pd.DataFrame({
+    ...     'y': [1,2,3,4,5,6,7,8],
+    ...     'row': ['a','a','b','b','a','a','b','b'],
+    ...     'col': ['x','y','x','y','x','y','x','y']
+    ... })
+    >>> grouped_statistic_pivot(df, dv='y', by=['row'], over=['col'], stat_func='mean')
+    col    x    y
+    row
+    a    3.0  4.0
+    b    5.0  6.0
+    """
+    # Compute the flat grouped statistic with all grouping variables
+    all_groups = by + over
+    flat_df = grouped_statistic(data, dv=dv, groups=all_groups, stat_func=stat_func)
+
+    # Get the stat column name
+    stat_label = {
+        "mean": "Mean", "sum": "Sum", "count": "N",
+        "variance": "Variance", "sd": "SD", "se": "SE",
+    }[stat_func]
+
+    # Pivot: by-variables become the index, over-variables become the columns
+    if len(by) == 1 and len(over) == 1:
+        pivot = flat_df.pivot(index=by[0], columns=over[0], values=stat_label)
+    elif len(by) > 1 and len(over) == 1:
+        pivot = flat_df.pivot_table(index=by, columns=over[0], values=stat_label, aggfunc='first')
+    elif len(by) == 1 and len(over) > 1:
+        pivot = flat_df.pivot_table(index=by[0], columns=over, values=stat_label, aggfunc='first')
+    else:
+        pivot = flat_df.pivot_table(index=by, columns=over, values=stat_label, aggfunc='first')
+
+    return pivot

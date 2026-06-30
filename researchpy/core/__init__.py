@@ -12,23 +12,20 @@ Usage:
 """
 
 from .data_utils import as_array, validate_array
-from .containerclasses import ModelFit, ModelEffects, CoefResults, FactorEffects, FitStatistics, ModelResults, TestResults, Term, ModelTerms, SolverOptions
+from .matrix_design import DesignMatrices, DesignMatrix
+from .spec import ComputeSpec, resolve
+from .matrix_engine import build_indicator_matrix, grouped_statistic, grouped_statistic_pivot
 
 
 # Define what gets exported with "from researchpy.core import *"
 __all__ = [
     'as_array',
     'validate_array',
-    #'CoreModel',
-    #'GeneralModel',
-    'ModelFit',
-    'ModelEffects',
-    'CoefResults',
-    'FactorEffects',
-    'FitStatistics',
-    'ModelResults',
-    'TestResults',
-    'Term',
-    'ModelTerms',
-    'SolverOptions'
+    'DesignMatrices',
+    'DesignMatrix',
+    'ComputeSpec',
+    'resolve',
+    'build_indicator_matrix',
+    'grouped_statistic',
+    'grouped_statistic_pivot',
 ]

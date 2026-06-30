@@ -2,7 +2,7 @@ from typing import Any
 from pandas import DataFrame
 
 from researchpy.models.base import CoreModel
-from researchpy.core.containerclasses import FactorEffects, ModelResults, SolverOptions
+from researchpy.containers import ModelResults, FactorEffects, SolverOptions
 from researchpy.utility import *
 
 

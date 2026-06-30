@@ -13,8 +13,8 @@ import numpy
 import pandas
 
 
-from ..containers.base import DesignInfo, EstimateResults
-from .containers import SummaryResult
+#from ..containers.base import DesignInfo, EstimateResults
+from ..containers.univariate import SummaryResult
 from ..core.data_utils import validate_array
 from .observation import n_obs, n_missing, percent_missing
 from .central_tendency import mean, median, mode, quartiles, iqr
