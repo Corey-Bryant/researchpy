@@ -111,7 +111,7 @@ class SolverOptions(CoreDataclass):
 
     Examples
     --------
-    >>> from researchpy.core.containerclasses import SolverOptions
+    >>> from researchpy.containers.multivariable import SolverOptions
     >>> opts = SolverOptions(method="mle", algorithm="BFGS", max_iter=1000)
     >>> opts.algorithm
     'BFGS'
@@ -483,7 +483,7 @@ class TestResults(CoreDataclass):
 
 
 @dataclass
-class Term:
+class Term(CoreDataclass):
     """
     Dataclass for storing information about a single regression model term.
 
@@ -609,7 +609,7 @@ class Term:
 
 
 @dataclass
-class ModelTerms:
+class ModelTerms(CoreDataclass):
     """
     Container for all terms in a regression model.
 

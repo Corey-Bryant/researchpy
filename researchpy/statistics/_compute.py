@@ -6,40 +6,115 @@ Provides the ``_route_computation()`` helper that encapsulates the
 resolve → route → compute → format pattern used by all descriptive
 stat functions that support the 5 calling conventions.
 
-Three output layouts:
+Four output layouts:
     - **ungrouped**: single DV → scalar; multiple DVs → DataFrame
     - **marginal** (iv): compute stat for each iv independently, stack
     - **cell** (by): compute stat for each combination, MultiIndex rows
     - **pivot** (by + over): rows = by levels, columns = over levels
+    - **mixed** (sub_specs): compute each term independently, stack with Term column
 """
 
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, List, Optional, Union
 
 import numpy
 import pandas
 
 from ..core.spec import resolve, ComputeSpec
 from ..core.data_utils import validate_array
-from ..core.matrix_engine import build_indicator_matrix, grouped_statistic, grouped_statistic_pivot, _build_cell_series
+from ..core.matrix_engine import grouped_statistic, grouped_statistic_pivot, _build_cell_series
 
 
-def _route_computation(
-        arg1: Any,
-        arg2: Any,
+def _compute_grouped_flat(
+    data: pandas.DataFrame,
+    dv_col: str,
+    groups: List[str],
     *,
-        dv: Optional[Union[str, List[str]]],
-        iv: Optional[Union[str, List[str]]],
-        by: Optional[Union[str, List[str]]],
-        over: Optional[Union[str, List[str]]],
-        data: Optional[pandas.DataFrame],
-        scalar_func: Callable[[numpy.ndarray], float],
-        matrix_stat: Optional[str] = None,
-        fallback_grouped_func: Optional[Callable] = None,
-        decimals: int = 4,
-        weights: Optional[str] = None,
-        stat_label: str = "Value",
-        **kwargs: object,
-) -> Union[float, pandas.DataFrame]:
+    scalar_func: Callable[[numpy.ndarray], float],
+    matrix_stat: Optional[str] = None,
+    decimals: int = 4,
+    stat_label: str = "Value",
+) -> pandas.DataFrame:
+    """Single entry point for grouped computation.
+
+    Two paths based on stat type:
+    - ``matrix_stat`` is not None: linear path (indicator matrix arithmetic
+      via ``grouped_statistic``)
+    - ``matrix_stat`` is None: non-linear path (``_build_cell_series`` for
+      group membership + ``scalar_func`` iteration)
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Source data.
+    dv_col : str
+        Dependent variable column name.
+    groups : list of str
+        Grouping column names.
+    scalar_func : callable
+        Function that takes a 1-D float array (NaN-free) and returns a scalar.
+        Used only on the non-linear path.
+    matrix_stat : str or None
+        If not None, delegates to ``grouped_statistic()`` for the optimized
+        matrix-arithmetic path. One of: 'mean', 'sum', 'count', 'variance',
+        'sd', 'se'.
+    decimals : int
+        Rounding decimal places.
+    stat_label : str
+        Column label for the statistic in the output DataFrame.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per group with columns for each group variable + stat.
+    """
+    if matrix_stat is not None:
+        # Linear path: matrix arithmetic
+        result_df = grouped_statistic(data, dv=dv_col, groups=groups, stat_func=matrix_stat)
+        stat_col = result_df.columns[-1]
+        result_df[stat_col] = result_df[stat_col].round(decimals)
+        return result_df
+
+    # Non-linear path: iterate over groups using _build_cell_series
+    cell_series = _build_cell_series(data, groups)
+    unique_cells = sorted(cell_series.unique())
+    values = data[dv_col].to_numpy(dtype=float)
+
+    results = []
+    for cell in unique_cells:
+        mask = cell_series == cell
+        arr = values[mask]
+        # Remove NaN for computation
+        clean = arr[~numpy.isnan(arr)]
+        value = round(float(scalar_func(clean)), decimals) if len(clean) > 0 else numpy.nan
+
+        row = {}
+        if len(groups) == 1:
+            row[groups[0]] = cell
+        else:
+            parts = cell.split(":")
+            for i, group_name in enumerate(groups):
+                row[group_name] = parts[i]
+        row[stat_label] = value
+        results.append(row)
+
+    return pandas.DataFrame(results)
+
+
+def _route_computation(arg1: Any,
+                       arg2: Any,
+                       *,
+                       dv: Optional[Union[str, List[str]]],
+                       iv: Optional[Union[str, List[str]]],
+                       by: Optional[Union[str, List[str]]],
+                       over: Optional[Union[str, List[str]]],
+                       data: Optional[pandas.DataFrame],
+                       scalar_func: Callable[[numpy.ndarray], float],
+                       matrix_stat: Optional[str] = None,
+                       decimals: int = 4,
+                       weights: Optional[str] = None,
+                       stat_label: str = "Value",
+                       **kwargs: object,
+                       ) -> Union[float, pandas.DataFrame]:
     """Route a descriptive stat computation through resolve → engine.
 
     This is the shared backbone for all descriptive functions that support
@@ -47,6 +122,7 @@ def _route_computation(
     1. Calls ``resolve()`` to normalize any input form into a ``ComputeSpec``
     2. Routes based on the spec layout:
        - No groups → scalar (single DV) or DataFrame (multiple DVs)
+       - sub_specs → mixed formula: compute each term, stack with Term column
        - iv → marginal: compute for each iv independently, stack results
        - by → cell: grouped computation with actual group names
        - by + over → pivot: crossed pivot table
@@ -58,15 +134,11 @@ def _route_computation(
     dv, iv, by, over, data : keyword arguments forwarded to ``resolve()``.
     scalar_func : callable
         Pure computation function: takes a 1-D float numpy array, returns a float.
-        Used for the ungrouped (fast) path.
+        Used for the ungrouped path and as the non-linear grouped path function.
     matrix_stat : str or None
         If the stat is directly supported by ``grouped_statistic()``
         (one of 'mean', 'sum', 'count', 'variance', 'sd', 'se'), pass
         the key here for the optimized matrix path.
-    fallback_grouped_func : callable or None
-        For stats NOT in the matrix engine (e.g., median, mode), provide
-        a fallback that takes (data, dv_col, groups, decimals) and returns
-        a DataFrame. Used when ``matrix_stat`` is None.
     decimals : int
         Decimal places for rounding. Default is 4.
     weights : str or None
@@ -80,9 +152,14 @@ def _route_computation(
     -------
     float or pandas.DataFrame
         - float when single DV, no groups
-        - DataFrame when multiple DVs, marginal, cell, or pivot
+        - DataFrame when multiple DVs, marginal, cell, pivot, or mixed
     """
+
     spec = resolve(arg1, arg2, dv=dv, iv=iv, by=by, over=over, data=data, weights=weights)
+
+    # === Mixed formula (sub_specs) — compute each term independently, stack ===
+    if spec.sub_specs is not None:
+        return _compute_mixed(spec, scalar_func, matrix_stat, decimals, stat_label, **kwargs)
 
     # === No groups (no iv, no by, no over) ===
     if spec.iv is None and spec.by is None and spec.over is None:
@@ -102,21 +179,20 @@ def _route_computation(
 
     # === Marginal (iv) — compute separately for each grouping variable, stack ===
     if spec.iv is not None:
-        return _compute_marginal(spec, scalar_func, matrix_stat, fallback_grouped_func, decimals, stat_label, **kwargs)
+        return _compute_marginal(spec, scalar_func, matrix_stat, decimals, stat_label, **kwargs)
 
     # === Pivot (by + over) ===
     if spec.over is not None:
-        return _compute_pivot(spec, scalar_func, matrix_stat, fallback_grouped_func, decimals, stat_label, **kwargs)
+        return _compute_pivot(spec, scalar_func, matrix_stat, decimals, stat_label, **kwargs)
 
     # === Cell (by only) — grouped with actual variable names ===
-    return _compute_cell(spec, scalar_func, matrix_stat, fallback_grouped_func, decimals, stat_label, **kwargs)
+    return _compute_cell(spec, scalar_func, matrix_stat, decimals, stat_label, **kwargs)
 
 
 def _compute_marginal(
     spec: ComputeSpec,
     scalar_func: Callable,
     matrix_stat: Optional[str],
-    fallback_grouped_func: Optional[Callable],
     decimals: int,
     stat_label: str,
     **kwargs,
@@ -130,24 +206,15 @@ def _compute_marginal(
     frames = []
     for dv_col in spec.dv:
         for iv_var in spec.iv:
-            if matrix_stat is not None:
-                result_df = grouped_statistic(
-                    spec.data, dv=dv_col, groups=[iv_var], stat_func=matrix_stat
-                )
-                # Round the stat column
-                stat_col = result_df.columns[-1]
-                result_df[stat_col] = result_df[stat_col].round(decimals)
-            elif fallback_grouped_func is not None:
-                result_df = fallback_grouped_func(
-                    spec.data, dv_col, [iv_var], decimals, **kwargs
-                )
-            else:
-                raise NotImplementedError(
-                    "Grouped computation not available for this statistic."
-                )
+            result_df = _compute_grouped_flat(
+                spec.data, dv_col, [iv_var],
+                scalar_func=scalar_func,
+                matrix_stat=matrix_stat,
+                decimals=decimals,
+                stat_label=stat_label,
+            )
 
             # Normalize to common column structure: Factor, Level, stat
-            # The result_df has columns [iv_var, stat_col]
             stat_col_name = result_df.columns[-1]
             normalized = pandas.DataFrame({
                 "Factor": iv_var,
@@ -168,7 +235,6 @@ def _compute_cell(
     spec: ComputeSpec,
     scalar_func: Callable,
     matrix_stat: Optional[str],
-    fallback_grouped_func: Optional[Callable],
     decimals: int,
     stat_label: str,
     **kwargs,
@@ -180,21 +246,13 @@ def _compute_cell(
     """
     frames = []
     for dv_col in spec.dv:
-        if matrix_stat is not None:
-            result_df = grouped_statistic(
-                spec.data, dv=dv_col, groups=spec.by, stat_func=matrix_stat
-            )
-            # Round the stat column
-            stat_col = result_df.columns[-1]
-            result_df[stat_col] = result_df[stat_col].round(decimals)
-        elif fallback_grouped_func is not None:
-            result_df = fallback_grouped_func(
-                spec.data, dv_col, spec.by, decimals, **kwargs
-            )
-        else:
-            raise NotImplementedError(
-                "Grouped computation not available for this statistic."
-            )
+        result_df = _compute_grouped_flat(
+            spec.data, dv_col, spec.by,
+            scalar_func=scalar_func,
+            matrix_stat=matrix_stat,
+            decimals=decimals,
+            stat_label=stat_label,
+        )
 
         # Add DV column if multiple DVs
         if len(spec.dv) > 1:
@@ -217,7 +275,6 @@ def _compute_pivot(
     spec: ComputeSpec,
     scalar_func: Callable,
     matrix_stat: Optional[str],
-    fallback_grouped_func: Optional[Callable],
     decimals: int,
     stat_label: str,
     **kwargs,
@@ -231,7 +288,6 @@ def _compute_pivot(
             pivot = grouped_statistic_pivot(
                 spec.data, dv=spec.dv[0], by=spec.by, over=spec.over, stat_func=matrix_stat
             )
-            # Round values
             pivot = pivot.round(decimals)
             return pivot
         else:
@@ -249,14 +305,17 @@ def _compute_pivot(
                 )
                 frames.append(pivot)
             return pandas.concat(frames)
-
-    elif fallback_grouped_func is not None:
-        # For non-matrix stats, compute flat then pivot manually
+    else:
+        # Non-linear path: compute flat then pivot manually
         all_groups = spec.by + spec.over
         frames = []
         for dv_col in spec.dv:
-            result_df = fallback_grouped_func(
-                spec.data, dv_col, all_groups, decimals, **kwargs
+            result_df = _compute_grouped_flat(
+                spec.data, dv_col, all_groups,
+                scalar_func=scalar_func,
+                matrix_stat=None,
+                decimals=decimals,
+                stat_label=stat_label,
             )
             frames.append(result_df)
 
@@ -277,70 +336,96 @@ def _compute_pivot(
         pivot = pivot.round(decimals)
         return pivot
 
-    else:
-        raise NotImplementedError(
-            "Grouped computation not available for this statistic."
-        )
 
-
-def _grouped_via_iteration(
-    data: pandas.DataFrame,
-    dv_col: str,
-    groups: List[str],
+def _compute_mixed(
+    spec: ComputeSpec,
+    scalar_func: Callable,
+    matrix_stat: Optional[str],
     decimals: int,
-    scalar_func: Callable[[numpy.ndarray], float],
-    stat_label: str = "Value",
+    stat_label: str,
+    **kwargs,
 ) -> pandas.DataFrame:
-    """Compute a grouped statistic by iterating over groups.
+    """Compute each term in a mixed formula independently and stack results.
 
-    Used as a fallback for stats that don't have a matrix-arithmetic shortcut
-    (e.g., median, mode, kurtosis, skewness).
+    Each sub-spec is computed via the appropriate layout (marginal for main
+    effects, cell for interactions), then tagged with a ``Term`` column and
+    concatenated.
 
     Parameters
     ----------
-    data : pd.DataFrame
-        Source data.
-    dv_col : str
-        Dependent variable column name.
-    groups : list of str
-        Grouping columns.
+    spec : ComputeSpec
+        The resolved spec with sub_specs populated.
+    scalar_func : callable
+        Scalar computation function.
+    matrix_stat : str or None
+        Matrix engine stat key, if applicable.
     decimals : int
         Rounding decimal places.
-    scalar_func : callable
-        Function that takes a 1-D float array and returns a scalar.
     stat_label : str
-        Column label for the statistic in the output DataFrame.
+        Column label for the statistic.
 
     Returns
     -------
     pd.DataFrame
-        One row per group with columns for each group variable + stat.
+        Stacked DataFrame with a ``Term`` column identifying each sub-result.
     """
-    cell_series = _build_cell_series(data, groups)
-    unique_cells = sorted(cell_series.unique())
-
-    results = []
-    for cell in unique_cells:
-        mask = cell_series == cell
-        arr = data.loc[mask, dv_col].to_numpy(dtype=float, na_value=numpy.nan)
-        # Remove NaN for computation
-        clean = arr[~numpy.isnan(arr)]
-        if len(clean) > 0:
-            value = round(float(scalar_func(clean)), decimals)
+    frames = []
+    for ts in spec.sub_specs:
+        if ts.layout == "iv":
+            # Marginal: compute for this single variable
+            sub_frames = []
+            for dv_col in spec.dv:
+                result_df = _compute_grouped_flat(
+                    spec.data, dv_col, ts.variables,
+                    scalar_func=scalar_func,
+                    matrix_stat=matrix_stat,
+                    decimals=decimals,
+                    stat_label=stat_label,
+                )
+                # Normalize column names to Level + stat for consistency
+                group_col = ts.variables[0]
+                stat_col_name = result_df.columns[-1]
+                normalized = pandas.DataFrame({
+                    "Level": result_df[group_col].values,
+                    stat_col_name: result_df[stat_col_name].values,
+                })
+                if len(spec.dv) > 1:
+                    normalized.insert(0, "Variable", dv_col)
+                sub_frames.append(normalized)
+            sub_result = pandas.concat(sub_frames, ignore_index=True)
         else:
-            value = numpy.nan
+            # Cell (by): compute for each combination
+            sub_frames = []
+            for dv_col in spec.dv:
+                result_df = _compute_grouped_flat(
+                    spec.data, dv_col, ts.variables,
+                    scalar_func=scalar_func,
+                    matrix_stat=matrix_stat,
+                    decimals=decimals,
+                    stat_label=stat_label,
+                )
+                # Build Level column by joining group values
+                if len(ts.variables) == 1:
+                    level_values = result_df[ts.variables[0]].values
+                else:
+                    # Join multiple group columns into single Level string
+                    level_values = result_df[ts.variables[0]].astype(str)
+                    for var in ts.variables[1:]:
+                        level_values = level_values + ":" + result_df[var].astype(str)
+                    level_values = level_values.values
 
-        # Build row with individual group variable values
-        row = {}
-        if len(groups) == 1:
-            row[groups[0]] = cell
-        else:
-            parts = cell.split(":")
-            for i, group_name in enumerate(groups):
-                row[group_name] = parts[i]
+                stat_col_name = result_df.columns[-1]
+                normalized = pandas.DataFrame({
+                    "Level": level_values,
+                    stat_col_name: result_df[stat_col_name].values,
+                })
+                if len(spec.dv) > 1:
+                    normalized.insert(0, "Variable", dv_col)
+                sub_frames.append(normalized)
+            sub_result = pandas.concat(sub_frames, ignore_index=True)
 
-        row[stat_label] = value
-        results.append(row)
+        # Tag with Term column
+        sub_result.insert(0, "Term", ts.term_name)
+        frames.append(sub_result)
 
-    return pandas.DataFrame(results)
-
+    return pandas.concat(frames, ignore_index=True)

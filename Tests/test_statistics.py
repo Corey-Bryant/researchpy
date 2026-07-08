@@ -420,8 +420,9 @@ class TestEdgeCases:
 
     def test_quartiles(self):
         result = quartiles([1, 2, 3, 4, 5])
-        assert "Q1" in result and "Q2" in result and "Q3" in result
-        assert result["Q2"] == 3.0
+        assert isinstance(result, pd.DataFrame)
+        assert "Q1" in result.columns and "Q2" in result.columns and "Q3" in result.columns
+        assert result["Q2"].iloc[0] == 3.0
 
     def test_iqr(self):
         result = iqr([1, 2, 3, 4, 5])

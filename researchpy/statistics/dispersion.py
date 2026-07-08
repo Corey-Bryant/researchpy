@@ -21,7 +21,7 @@ import pandas
 import scipy.stats
 
 from ..core.data_utils import validate_array
-from ._compute import _route_computation, _grouped_via_iteration
+from ._compute import _route_computation
 
 
 def variance(

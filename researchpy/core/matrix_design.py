@@ -4,7 +4,7 @@ import formulaic
 from typing import Any, Dict, List, Optional, Union
 
 from researchpy.utility import variable_information
-
+from researchpy.containers import ModelTerms
 
 
 class DesignMatrices():
@@ -88,6 +88,8 @@ class DMatrix():
         self.DV = self.mm.lhs
         self.IV = self.mm.rhs
 
+        # New dataclass-based term/column mapping (from formulaic ModelSpec)
+        self._model_terms = ModelTerms.from_model_spec(self.IV.model_spec)
 
         self._patsy_factor_information, self._mapping, self._rp_factor_information = variable_information(
                 [str(t) for t in self.IV.model_spec.terms],

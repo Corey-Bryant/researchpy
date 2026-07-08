@@ -20,6 +20,12 @@ from .intervals import confidence_interval
 from .shape import skewness, kurtosis
 
 
+def _quartiles_as_dict(arr) -> dict:
+    """Compute quartiles and return as dict for SummaryResult compatibility."""
+    result_df = quartiles(arr)
+    return {"Q1": result_df["Q1"].iloc[0], "Q2": result_df["Q2"].iloc[0], "Q3": result_df["Q3"].iloc[0]}
+
+
 # ---------------------------------------------------------------------------
 # Registry: maps user-facing stat names to computation callables.
 # Each callable takes (arr, **kwargs) and returns a scalar or structured value.
@@ -47,7 +53,7 @@ _STAT_REGISTRY: Dict[str, Any] = {
     "Kurtosis": lambda arr, **kw: kurtosis(arr),
     "Skew": lambda arr, **kw: skewness(arr),
     "CV": lambda arr, **kw: coefficient_of_variation(arr),
-    "Quartiles": lambda arr, **kw: quartiles(arr),
+    "Quartiles": lambda arr, **kw: _quartiles_as_dict(arr),
 }
 
 # Default stats when none are specified

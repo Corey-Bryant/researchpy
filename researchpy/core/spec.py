@@ -33,6 +33,33 @@ import pandas as pd
 
 
 @dataclass
+class TermSpec:
+    """One term extracted from a mixed formula.
+
+    Used when a formula contains both main effects and interactions that
+    don't form a pure star expansion (e.g., ``y ~ C(x) + C(k):C(z)``).
+    Each term is computed independently and results are stacked with a
+    ``Term`` column identifying the source.
+
+    Attributes
+    ----------
+    term_name : str
+        Cleaned term name (e.g., ``"x"`` or ``"k:z"``).
+    term_raw : str
+        Raw term string as written in the formula (e.g., ``"C(x)"`` or ``"C(k):C(z)"``).
+    layout : str
+        How this term should be computed: ``"iv"`` (marginal) or ``"by"`` (cell).
+    variables : list of str
+        The grouping variable column name(s) for this term.
+    """
+
+    term_name: str
+    term_raw: str
+    layout: str
+    variables: List[str]
+
+
+@dataclass
 class ComputeSpec:
     """Normalized specification for a computation.
 
@@ -57,6 +84,11 @@ class ComputeSpec:
         The original formula string, if one was provided.
     weights : str or None
         Column name for observation weights. None = unweighted.
+    sub_specs : list of TermSpec or None
+        For mixed formulas (e.g., ``y ~ C(x) + C(k):C(z)``), holds one
+        TermSpec per formula term. When not None, the computation engine
+        iterates each sub-spec independently and stacks results with a
+        ``Term`` column. None for all non-mixed cases.
 
     Examples
     --------
@@ -80,6 +112,7 @@ class ComputeSpec:
     data: Optional[pd.DataFrame] = None
     formula: Optional[str] = None
     weights: Optional[str] = None
+    sub_specs: Optional[List[TermSpec]] = None
 
 
 def resolve(arg1: Any = None, arg2: Any = None, /, *,
@@ -278,7 +311,8 @@ def resolve(arg1: Any = None, arg2: Any = None, /, *,
 def _resolve_groupby(groupby_obj: Any, weights: Optional[str] = None) -> ComputeSpec:
     """Resolve a pandas GroupBy object into a ComputeSpec.
 
-    Extracts group key names and reconstructs the underlying data.
+    Extracts group key names and reconstructs the underlying data as a
+    DataFrame containing both the DV column(s) and group column(s).
 
     Parameters
     ----------
@@ -298,34 +332,22 @@ def _resolve_groupby(groupby_obj: Any, weights: Optional[str] = None) -> Compute
     else:
         by_names = [group_keys]
 
-    # Extract DV name(s)
+    # Extract DV name(s) and build source DataFrame
     if isinstance(groupby_obj, pd.core.groupby.SeriesGroupBy):
         dv_name = groupby_obj.obj.name if groupby_obj.obj.name is not None else "value"
         dv_names = [dv_name]
-        # Reconstruct full DataFrame with group columns + DV
+        # Start with the DV Series as a DataFrame
         source_df = groupby_obj.obj.to_frame()
-        # The group columns may not be in the Series frame, get from the grouper
-        for key in by_names:
-            if key not in source_df.columns:
-                # Get group column from the original obj's index or grouper
-                try:
-                    source_df = groupby_obj.obj.reset_index()
-                    break
-                except Exception:
-                    pass
     else:
         dv_names = [col for col in groupby_obj.obj.columns if col not in by_names]
-        source_df = groupby_obj.obj
-
-    # Ensure we have the full DataFrame with both group and DV columns
-    if not all(col in source_df.columns for col in by_names):
-        # Attempt to reconstruct from the groupby object
         source_df = groupby_obj.obj.copy()
-        for key in by_names:
-            if key not in source_df.columns:
-                # Try to get from index
-                if key in source_df.index.names:
-                    source_df = source_df.reset_index()
+
+    # Add missing group columns from the grouper internals
+    for key in by_names:
+        if key not in source_df.columns:
+            group_values = _extract_group_column(groupby_obj, key)
+            if group_values is not None:
+                source_df[key] = group_values
 
     return ComputeSpec(
         dv=dv_names,
@@ -335,18 +357,59 @@ def _resolve_groupby(groupby_obj: Any, weights: Optional[str] = None) -> Compute
     )
 
 
+def _extract_group_column(groupby_obj: Any, key: str) -> Optional[Any]:
+    """Extract a group column's values from a GroupBy object's internal grouper.
+
+    Tries multiple pandas internal APIs for compatibility across versions.
+
+    Parameters
+    ----------
+    groupby_obj : GroupBy
+        The pandas GroupBy object.
+    key : str
+        The group column name to extract.
+
+    Returns
+    -------
+    array-like or None
+        The group column values, or None if extraction fails.
+    """
+    # Try pandas 3.x path: _grouper.groupings[].grouping_vector
+    grouper = getattr(groupby_obj, '_grouper', None) or getattr(groupby_obj, 'grouper', None)
+    if grouper is not None:
+        groupings = getattr(grouper, 'groupings', None)
+        if groupings is not None:
+            for grouping in groupings:
+                if getattr(grouping, 'name', None) == key:
+                    # Try grouping_vector (pandas 3.x)
+                    gv = getattr(grouping, 'grouping_vector', None)
+                    if gv is not None:
+                        return list(gv)
+                    # Try obj.values (older pandas)
+                    obj = getattr(grouping, 'obj', None)
+                    if obj is not None:
+                        if hasattr(obj, 'values'):
+                            return obj.values
+    return None
+
+
 def _parse_formula(formula: str, data: pd.DataFrame, weights: Optional[str] = None) -> ComputeSpec:
-    """Parse a formula string into a ComputeSpec using Patsy's ModelDesc.
+    """Parse a formula string into a ComputeSpec using formulaic's parser.
 
     Detects the formula operator pattern to determine layout:
-    - Only single-factor terms (connected by +) → marginal (iv)
-    - Only multi-factor interaction terms (:) → cell means (by)
-    - Mix of main effects + interactions (*) → pivot (by + over)
+    - Single main effect term → cell (by)
+    - Multiple main effect terms (connected by +) → marginal (iv)
+    - Interaction-only term(s) (:) → cell means (by)
+    - Star expansion (* → main effects + interaction) → pivot (by + over)
+    - Mixed (main effects AND interactions, not pure star) → sub_specs
+
+    Also validates that all RHS terms are wrapped in C() for descriptive
+    statistics (grouping variables must be categorical).
 
     Parameters
     ----------
     formula : str
-        Patsy-style formula, e.g., "y ~ C(x)", "y ~ C(x):C(k)", "y ~ C(x)*C(k)".
+        Wilkinson-style formula, e.g., "y ~ C(x)", "y ~ C(x):C(k)", "y ~ C(x)*C(k)".
     data : pd.DataFrame
         Source DataFrame.
     weights : str or None
@@ -359,7 +422,8 @@ def _parse_formula(formula: str, data: pd.DataFrame, weights: Optional[str] = No
     Raises
     ------
     ValueError
-        If the formula pattern is ambiguous or columns are not found.
+        If the formula contains terms not wrapped in C(), or if columns
+        are not found in the DataFrame.
     """
     from researchpy.containers.multivariable import ModelTerms
 
@@ -367,6 +431,16 @@ def _parse_formula(formula: str, data: pd.DataFrame, weights: Optional[str] = No
 
     dv_names = mt.dv if mt.dv else []
     _validate_columns(dv_names, data, "DV (left side of ~)")
+
+    # --- Validate all RHS terms are wrapped in C() ---
+    for term in mt.terms:
+        for part in term.term.split(":"):
+            if "C(" not in part and part != "Intercept":
+                raise ValueError(
+                    f"Term '{part}' on the RHS is not wrapped in C(). "
+                    f"For descriptive statistics, grouping variables must be categorical. "
+                    f"Use: 'y ~ C({part})' to specify '{part}' as a grouping factor."
+                )
 
     # Categorize RHS terms
     main_effect_terms = []   # single-factor terms (e.g., C(x))
@@ -386,7 +460,7 @@ def _parse_formula(formula: str, data: pd.DataFrame, weights: Optional[str] = No
         _validate_columns(var_names, data, "RHS terms")
 
         if len(var_names) == 1:
-            # Single grouping variable — use by (equivalent to iv for single var)
+            # Single grouping variable — use by
             return ComputeSpec(
                 dv=dv_names,
                 by=var_names,
@@ -424,38 +498,49 @@ def _parse_formula(formula: str, data: pd.DataFrame, weights: Optional[str] = No
         )
 
     elif len(interaction_terms) > 0 and len(main_effect_terms) > 0:
-        # Pattern: "y ~ C(x)*C(k)" → pivot (by + over)
-        # * expands to main effects + interaction in Patsy
-        # First factor of interaction → by, remaining → over
+        # Could be star expansion OR mixed formula.
+        # Star expansion: main effects + interaction where the interaction
+        # components exactly match the main effects.
+        # e.g., "y ~ C(x)*C(k)" expands to C(x) + C(k) + C(x):C(k)
 
-        # Get the interaction variable names
-        # Use the first interaction term to determine by/over split
-        first_interaction = interaction_terms[0]
-        interaction_vars = first_interaction.name.split(":")
+        if _is_star_expansion(main_effect_terms, interaction_terms):
+            # Star expansion → pivot (by + over)
+            first_interaction = interaction_terms[0]
+            interaction_vars = first_interaction.name.split(":")
 
-        by_var = [interaction_vars[0]]
-        over_vars = interaction_vars[1:]
+            by_var = [interaction_vars[0]]
+            over_vars = interaction_vars[1:]
 
-        # If there are multiple interaction terms sharing the same first factor,
-        # collect all second factors into over
-        # e.g., "y ~ C(x)*C(k) + C(x)*C(z)" → by=["x"], over=["k", "z"]
-        for term in interaction_terms[1:]:
-            term_vars = term.name.split(":")
-            for v in term_vars[1:]:
-                if v not in over_vars:
-                    over_vars.append(v)
+            # Collect additional over vars from further interaction terms
+            for term in interaction_terms[1:]:
+                term_vars = term.name.split(":")
+                for v in term_vars[1:]:
+                    if v not in over_vars:
+                        over_vars.append(v)
 
-        all_vars = by_var + over_vars
-        _validate_columns(all_vars, data, "RHS terms")
+            all_vars = by_var + over_vars
+            _validate_columns(all_vars, data, "RHS terms")
 
-        return ComputeSpec(
-            dv=dv_names,
-            by=by_var,
-            over=over_vars,
-            data=data,
-            formula=formula,
-            weights=weights,
-        )
+            return ComputeSpec(
+                dv=dv_names,
+                by=by_var,
+                over=over_vars,
+                data=data,
+                formula=formula,
+                weights=weights,
+            )
+        else:
+            # Mixed formula → sub_specs
+            # Each term becomes a TermSpec, computed independently and stacked
+            sub_specs = _build_sub_specs(main_effect_terms, interaction_terms, data)
+
+            return ComputeSpec(
+                dv=dv_names,
+                sub_specs=sub_specs,
+                data=data,
+                formula=formula,
+                weights=weights,
+            )
 
     else:
         # No RHS terms — just compute for the DV(s) directly
@@ -465,6 +550,95 @@ def _parse_formula(formula: str, data: pd.DataFrame, weights: Optional[str] = No
             formula=formula,
             weights=weights,
         )
+
+
+def _is_star_expansion(
+    main_effect_terms: List[Any],
+    interaction_terms: List[Any],
+) -> bool:
+    """Detect whether a set of main effects + interactions is a star expansion.
+
+    A star expansion occurs when the main effect variable names exactly match
+    the components of the interaction term(s). For example:
+    - ``C(x) + C(k) + C(x):C(k)`` is a star expansion of ``C(x)*C(k)``
+    - ``C(x) + C(k):C(z)`` is NOT a star expansion
+
+    Parameters
+    ----------
+    main_effect_terms : list of Term
+        The main effect terms from the formula RHS.
+    interaction_terms : list of Term
+        The interaction terms from the formula RHS.
+
+    Returns
+    -------
+    bool
+    """
+    main_names = {t.name for t in main_effect_terms}
+
+    # Check if all interaction components are present as main effects
+    for term in interaction_terms:
+        interaction_vars = set(term.name.split(":"))
+        if not interaction_vars.issubset(main_names):
+            return False
+
+    # Check if all main effects appear in at least one interaction
+    all_interaction_vars = set()
+    for term in interaction_terms:
+        all_interaction_vars.update(term.name.split(":"))
+
+    if main_names != all_interaction_vars:
+        return False
+
+    return True
+
+
+def _build_sub_specs(
+    main_effect_terms: List[Any],
+    interaction_terms: List[Any],
+    data: pd.DataFrame,
+) -> List[TermSpec]:
+    """Build TermSpec list from a mixed formula's terms.
+
+    Main effect terms get layout="iv" (marginal computation).
+    Interaction terms get layout="by" (cell computation).
+
+    Parameters
+    ----------
+    main_effect_terms : list of Term
+        Main effect terms.
+    interaction_terms : list of Term
+        Interaction terms.
+    data : pd.DataFrame
+        Source data for column validation.
+
+    Returns
+    -------
+    list of TermSpec
+    """
+    sub_specs = []
+
+    for term in main_effect_terms:
+        variables = [term.name]
+        _validate_columns(variables, data, f"term '{term.term}'")
+        sub_specs.append(TermSpec(
+            term_name=term.name,
+            term_raw=term.term,
+            layout="iv",
+            variables=variables,
+        ))
+
+    for term in interaction_terms:
+        variables = term.name.split(":")
+        _validate_columns(variables, data, f"term '{term.term}'")
+        sub_specs.append(TermSpec(
+            term_name=term.name,
+            term_raw=term.term,
+            layout="by",
+            variables=variables,
+        ))
+
+    return sub_specs
 
 
 def _validate_columns(columns: List[str], data: pd.DataFrame, label: str) -> None:

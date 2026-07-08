@@ -18,7 +18,7 @@ from typing import Any, List, Optional, Union
 import pandas
 import scipy.stats
 
-from ._compute import _route_computation, _grouped_via_iteration
+from ._compute import _route_computation
 
 
 def skewness(
@@ -84,19 +84,11 @@ def skewness(
     def _skew_scalar(arr):
         return float(scipy.stats.skew(arr, nan_policy='omit'))
 
-    def _skew_grouped(data_df, dv_col, groups, dec, **kw):
-        return _grouped_via_iteration(
-            data_df, dv_col, groups, dec,
-            scalar_func=_skew_scalar,
-            stat_label="Skewness",
-        )
-
     return _route_computation(
         arg1, arg2,
         dv=dv, iv=iv, by=by, over=over, data=data,
         scalar_func=_skew_scalar,
         matrix_stat=None,
-        fallback_grouped_func=_skew_grouped,
         stat_label="Skewness",
         decimals=decimals,
     )
@@ -156,19 +148,11 @@ def kurtosis(
     def _kurtosis_scalar(arr):
         return float(scipy.stats.kurtosis(arr, fisher=fisher, nan_policy='omit'))
 
-    def _kurtosis_grouped(data_df, dv_col, groups, dec, **kw):
-        return _grouped_via_iteration(
-            data_df, dv_col, groups, dec,
-            scalar_func=_kurtosis_scalar,
-            stat_label="Kurtosis",
-        )
-
     return _route_computation(
         arg1, arg2,
         dv=dv, iv=iv, by=by, over=over, data=data,
         scalar_func=_kurtosis_scalar,
         matrix_stat=None,
-        fallback_grouped_func=_kurtosis_grouped,
         stat_label="Kurtosis",
         decimals=decimals,
     )
