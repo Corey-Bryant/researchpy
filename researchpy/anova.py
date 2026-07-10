@@ -6,6 +6,7 @@ Created on Thu Jul 15 08:07:51 2021
 """
 
 # %% Importing libraries
+import warnings
 import numpy
 import scipy.stats
 import patsy
@@ -15,6 +16,11 @@ from researchpy.summary import summarize
 from researchpy.ols import *
 #from .model import model
 from researchpy.utility import *
+
+
+def _to_scalar(x):
+    """Safely convert a 0-d or (1,1) numpy array to a Python float."""
+    return numpy.asarray(x).item()
 
 
 # %% Creating anova class which
@@ -65,6 +71,15 @@ class anova(ols):
     """
 
     def __init__(self, formula_like, data={}, sum_of_squares=3):
+        # Issue deprecation warning
+        warnings.warn(
+            "The 'anova' class is deprecated and will be removed in a future version. "
+            "Please use 'Anova' from researchpy.models.multivariable instead: "
+            "from researchpy.models.multivariable import Anova. "
+            "See documentation for migration guide.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         super().__init__(formula_like, data)
 
         ###########
@@ -159,18 +174,18 @@ class anova(ols):
                     # Updating items
                     factor_effects["Source"].append(term)
                     factor_effects["Sum of Squares"].append(
-                        float(sum_of_square_factor))
+                        _to_scalar(sum_of_square_factor))
                     factor_effects["Degrees of Freedom"].append(
-                        float(degrees_of_freedom_factor))
-                    factor_effects["Mean Squares"].append(float(msr_f))
-                    factor_effects["F value"].append(float(f_value_model))
-                    factor_effects["p-value"].append(float(f_p_value_model))
+                        _to_scalar(degrees_of_freedom_factor))
+                    factor_effects["Mean Squares"].append(_to_scalar(msr_f))
+                    factor_effects["F value"].append(_to_scalar(f_value_model))
+                    factor_effects["p-value"].append(_to_scalar(f_p_value_model))
 
-                    factor_effects["Eta squared"].append(float(eta_squared_partial))
+                    factor_effects["Eta squared"].append(_to_scalar(eta_squared_partial))
                     
-                    factor_effects["Epsilon squared"].append(float(epsilon_squared_partial))
+                    factor_effects["Epsilon squared"].append(_to_scalar(epsilon_squared_partial))
                     
-                    factor_effects["Omega squared"].append(float(omega_squared_partial))
+                    factor_effects["Omega squared"].append(_to_scalar(omega_squared_partial))
                     #factor_effects["r squared"].append("")
                     #factor_effects["r squared adj."].append("")
 
@@ -274,20 +289,29 @@ class anova(ols):
 
                 
                 # Updating items
-                factor_effects["Source"].append(current_term)
-                factor_effects["Sum of Squares"].append(
-                    float(sum_of_square_factor))
-                factor_effects["Degrees of Freedom"].append(
-                    float(degrees_of_freedom_factor))
-                factor_effects["Mean Squares"].append(float(msr_f))
-                factor_effects["F value"].append(float(f_value_model))
-                factor_effects["p-value"].append(float(f_p_value_model))
+                try:
+                    factor_effects["Source"].append(current_term)
+                    factor_effects["Sum of Squares"].append(_to_scalar(sum_of_square_factor))
+                    factor_effects["Degrees of Freedom"].append(_to_scalar(degrees_of_freedom_factor))
+                    factor_effects["Mean Squares"].append(_to_scalar(msr_f))
+                    factor_effects["F value"].append(_to_scalar(f_value_model))
+                    factor_effects["p-value"].append(_to_scalar(f_p_value_model))
 
-                factor_effects["Eta squared"].append(float(eta_squared_partial))
-                factor_effects["Epsilon squared"].append(float(epsilon_squared_partial))
-                factor_effects["Omega squared"].append(float(omega_squared_partial))
-                #factor_effects["r squared"].append("")
-                #factor_effects["r squared adj."].append("")
+                    factor_effects["Eta squared"].append(_to_scalar(eta_squared_partial))
+                    factor_effects["Epsilon squared"].append(_to_scalar(epsilon_squared_partial))
+                    factor_effects["Omega squared"].append(_to_scalar(omega_squared_partial))
+
+                except:
+                    factor_effects["Source"].append(current_term)
+                    factor_effects["Sum of Squares"].append(_to_scalar(sum_of_square_factor))
+                    factor_effects["Degrees of Freedom"].append(_to_scalar(degrees_of_freedom_factor))
+                    factor_effects["Mean Squares"].append(_to_scalar(msr_f))
+                    factor_effects["F value"].append(_to_scalar(f_value_model))
+                    factor_effects["p-value"].append(_to_scalar(f_p_value_model))
+
+                    factor_effects["Eta squared"].append(_to_scalar(eta_squared_partial))
+                    factor_effects["Epsilon squared"].append(_to_scalar(epsilon_squared_partial))
+                    factor_effects["Omega squared"].append(_to_scalar(omega_squared_partial))
 
             self.factor_effects = factor_effects
 
@@ -341,10 +365,10 @@ class anova(ols):
             terms_design_info = []
             for term in x_full.design_info.term_names[1:]:
                 terms_design_info.append(x_full.design_info.subset(term))
-                
-                
-            
-          
+
+
+
+
             """
             ##for factor in patsy.build_design_matrices(terms_design_info, data):
             for factor in the_terms_3:
@@ -408,27 +432,27 @@ class anova(ols):
                 
                     # Updating items
                     factor_effects["Source"].append(factor.design_info.term_names[1])
-                    factor_effects["Sum of Squares"].append(float(sum_of_square_factor))
-                    factor_effects["Degrees of Freedom"].append(float(degrees_of_freedom_factor))
-                    factor_effects["Mean Squares"].append(float(msr_f))
-                    factor_effects["F value"].append(float(f_value_model))
-                    factor_effects["p-value"].append(float(f_p_value_model))
+                    factor_effects["Sum of Squares"].append(_to_scalar(sum_of_square_factor))
+                    factor_effects["Degrees of Freedom"].append(_to_scalar(degrees_of_freedom_factor))
+                    factor_effects["Mean Squares"].append(_to_scalar(msr_f))
+                    factor_effects["F value"].append(_to_scalar(f_value_model))
+                    factor_effects["p-value"].append(_to_scalar(f_p_value_model))
 
-                    factor_effects["Eta squared"].append(float(eta_squared_partial))
-                    factor_effects["Epsilon squared"].append(float(epsilon_squared_partial))
-                    factor_effects["Omega squared"].append(float(omega_squared_partial))
+                    factor_effects["Eta squared"].append(_to_scalar(eta_squared_partial))
+                    factor_effects["Epsilon squared"].append(_to_scalar(epsilon_squared_partial))
+                    factor_effects["Omega squared"].append(_to_scalar(omega_squared_partial))
                     #factor_effects["r squared"].append("")
                     #factor_effects["r squared adj."].append("")
 
                     self.factor_effects = factor_effects
             
             """
-            
-            
-            
-            
-            
-            
+
+
+
+
+
+
             for current_term in the_terms_3:
 
                 terms_in_model = []
@@ -523,18 +547,29 @@ class anova(ols):
 
                 
                 # Updating items
-                factor_effects["Source"].append(current_term)
-                factor_effects["Sum of Squares"].append(float(sum_of_square_factor))
-                factor_effects["Degrees of Freedom"].append(float(degrees_of_freedom_factor))
-                factor_effects["Mean Squares"].append(float(msr_f))
-                factor_effects["F value"].append(float(f_value_model))
-                factor_effects["p-value"].append(float(f_p_value_model))
+                try:
+                    factor_effects["Source"].append(current_term)
+                    factor_effects["Sum of Squares"].append(_to_scalar(sum_of_square_factor))
+                    factor_effects["Degrees of Freedom"].append(_to_scalar(degrees_of_freedom_factor))
+                    factor_effects["Mean Squares"].append(_to_scalar(msr_f))
+                    factor_effects["F value"].append(_to_scalar(f_value_model))
+                    factor_effects["p-value"].append(_to_scalar(f_p_value_model))
 
-                factor_effects["Eta squared"].append(float(eta_squared_partial))
-                factor_effects["Epsilon squared"].append(float(epsilon_squared_partial))
-                factor_effects["Omega squared"].append(float(omega_squared_partial))
-                #factor_effects["r squared"].append("")
-                #factor_effects["r squared adj."].append("")
+                    factor_effects["Eta squared"].append(_to_scalar(eta_squared_partial))
+                    factor_effects["Epsilon squared"].append(_to_scalar(epsilon_squared_partial))
+                    factor_effects["Omega squared"].append(_to_scalar(omega_squared_partial))
+
+                except:
+                    factor_effects["Source"].append(current_term)
+                    factor_effects["Sum of Squares"].append(_to_scalar(sum_of_square_factor))
+                    factor_effects["Degrees of Freedom"].append(_to_scalar(degrees_of_freedom_factor))
+                    factor_effects["Mean Squares"].append(_to_scalar(msr_f))
+                    factor_effects["F value"].append(_to_scalar(f_value_model))
+                    factor_effects["p-value"].append(_to_scalar(f_p_value_model))
+
+                    factor_effects["Eta squared"].append(_to_scalar(eta_squared_partial))
+                    factor_effects["Epsilon squared"].append(_to_scalar(epsilon_squared_partial))
+                    factor_effects["Omega squared"].append(_to_scalar(omega_squared_partial))
 
                 self.factor_effects = factor_effects
                 

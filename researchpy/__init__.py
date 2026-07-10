@@ -1,11 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-
-@author: Corey Bryant
-
-Last udpated: 03/05/2024
-
-"""
 
 from .version import __version__
 from .ttest import ttest
@@ -15,9 +8,13 @@ from .crosstab import *
 from .difference_test import *
 from .basic_stats import *
 from .utility import *
-from .model import *
 from .signrank import *
 from .predict import *
-from .anova import *
-from .ols import *
 
+# Dataset and Dataset Importers
+from . import datasets
+
+# These are deprecated and will be removed in future versions
+from .model import *
+from .ols import ols
+from .anova import anova

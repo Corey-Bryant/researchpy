@@ -1,5 +1,18 @@
+# -*- coding: utf-8 -*-
+"""
+Researchpy Model Module
 
-# Used
+This module provides the base model class for Researchpy regression models.
+
+DEPRECATION NOTICE:
+    The `model` class in this module is maintained for backward compatibility with v0.3.7.
+    It will be deprecated in a future version. New code should use:
+
+        from researchpy.models import CoreModel
+
+    The new modular structure provides better organization and more functionality.
+"""
+import warnings
 import numpy
 import scipy.stats
 import patsy
@@ -16,11 +29,26 @@ class model():
     observations are dropped from the data. -matrix_type- parameter determines
     which design matrix will be returned; value of 1 will return a design matrix
     with the intercept, while a value of 0 will not.
-
+    .. deprecated::
+        The `model` class is deprecated and will be removed in a future version.
+        Please use `researchpy.models.CoreModel` or `researchpy.models.GeneralModel` instead.
+        Example migration:
+            # Old way
+            from researchpy.model import model
+            # New way
+            from researchpy.models import CoreModel
     """
 
 
     def __init__(self, formula_like, data = {}, matrix_type = 1):
+        # Issue deprecation warning
+        warnings.warn(
+            "The 'model' class is deprecated and will be removed in a future version. "
+            "Please use 'researchpy.models.CoreModel' or 'researchpy.models.GeneralModel' instead. "
+            "See documentation for migration guide.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         # matrix_type = 1 includes intercept
         # matrix_type = 0 does not include the intercept
 
