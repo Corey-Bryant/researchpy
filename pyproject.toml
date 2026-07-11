@@ -23,7 +23,6 @@ dependencies = [
     'statsmodels>=0.14.0',
     'patsy>=1.0.2',
     'requests>=2.20.0',
-    "ipykernel>=7.3.0",
 ]
 
 

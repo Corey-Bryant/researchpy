@@ -78,20 +78,23 @@ class TestCrosstabBasic:
 
     def test_margins_included_by_default(self, crosstab_basic):
         """Default crosstab should include margins (All row/column)."""
-        # Margins add 'All' to index and columns
-        assert "All" in crosstab_basic.index
+        # With MultiIndex, 'All' is at level 1 of the index
+        level_1_values = crosstab_basic.index.get_level_values(1)
+        assert "All" in level_1_values
 
     def test_no_margins(self, drug_series, disease_series):
         """margins=False should exclude totals."""
         from researchpy.crosstab import crosstab
         result = crosstab(drug_series, disease_series, margins=False)
-        assert "All" not in result.index
+        level_1_values = result.index.get_level_values(1)
+        assert "All" not in level_1_values
 
     def test_total_n(self, crosstab_basic):
         """Total N in margins should match golden value."""
         golden = SYSTOLIC_CROSSTAB
-        # The 'All' row, last column should be total N
-        all_row = crosstab_basic.loc["All"]
+        # With MultiIndex, access the 'All' row via tuple
+        index_name = crosstab_basic.index.get_level_values(0)[0]
+        all_row = crosstab_basic.loc[(index_name, "All")]
         assert all_row.iloc[-1] == golden["n"]
 
     def test_cell_counts(self, drug_series, disease_series):
@@ -102,7 +105,10 @@ class TestCrosstabBasic:
 
         for drug_level, disease_counts in golden.items():
             for disease_level, expected_count in disease_counts.items():
-                actual = result.loc[drug_level].iloc[disease_level - 1]
+                # Access via MultiIndex: (index_name, drug_level) for row
+                index_name = result.index.get_level_values(0)[0]
+                row = result.loc[(index_name, drug_level)]
+                actual = row.iloc[disease_level - 1]
                 assert actual == expected_count, (
                     f"drug={drug_level}, disease={disease_level}: "
                     f"expected {expected_count}, got {actual}"
@@ -126,7 +132,7 @@ class TestCrosstabProportions:
         """Row proportions should sum to ~100 for each row."""
         from researchpy.crosstab import crosstab
         result = crosstab(drug_series, disease_series, prop="row")
-        # Each row (excluding the last 'All' column which is 100) should sum to ~100
+        # Each row's last column (the 'All' column) should be 100
         for idx in result.index:
             row_sum = result.loc[idx].iloc[-1]
             assert row_sum == pytest.approx(100.0, abs=0.1), (
@@ -138,7 +144,8 @@ class TestCrosstabProportions:
         from researchpy.crosstab import crosstab
         result = crosstab(drug_series, disease_series, prop="col")
         # The 'All' row should be 100 for each column
-        all_row = result.loc["All"]
+        index_name = result.index.get_level_values(0)[0]
+        all_row = result.loc[(index_name, "All")]
         for val in all_row:
             assert val == pytest.approx(100.0, abs=0.1), (
                 f"Column total should be 100, got {val}"
@@ -149,7 +156,8 @@ class TestCrosstabProportions:
         from researchpy.crosstab import crosstab
         result = crosstab(drug_series, disease_series, prop="cell")
         # The All/All cell should be 100
-        total = result.loc["All"].iloc[-1]
+        index_name = result.index.get_level_values(0)[0]
+        total = result.loc[(index_name, "All")].iloc[-1]
         assert total == pytest.approx(100.0, abs=0.1)
 
 
@@ -291,13 +299,10 @@ class TestCrosstabExpectedFreqs:
                 ), f"Expected freq [{i},{j}]: expected {expected_val}, got {actual}"
 
     def test_expected_freqs_without_test(self, drug_series, disease_series):
-        """expected_freqs=True without test should return (ct, expected)."""
+        """expected_freqs=True without test should return ct only."""
         from researchpy.crosstab import crosstab
         result = crosstab(drug_series, disease_series, expected_freqs=True)
-        assert isinstance(result, tuple)
-        assert len(result) == 2
-        assert isinstance(result[0], pd.DataFrame)
-        assert isinstance(result[1], pd.DataFrame)
+        assert isinstance(result, pd.DataFrame)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

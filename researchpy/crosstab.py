@@ -22,21 +22,48 @@ def crosstab(group1, group2, prop=None, test=False, margins=True,
         ## Creating the contingency table ##
         contingency_table = pd.crosstab(group1, group2, margins = True)
 
+        # --- Shape and size of contigency table ---
+        num_row = contingency_table.shape[0] - 1
+        num_col = contingency_table.shape[1] - 1
+        n = contingency_table.iloc[-1, -1]
+
+        # --- Creating a multi-index for columns and index ---
         multiindex_columns = pd.MultiIndex.from_product([[f"{contingency_table.columns.name}"], contingency_table.columns])
         multiindex_index = pd.MultiIndex.from_product([[f"{contingency_table.index.name}"], contingency_table.index])
         multiindex_columns_names = ['', '']
         multiindex_index_names = ['', '']
 
+        ## Setting main crosstabulation table ##
+        if prop:
+            if prop == 'row':
+                ct = round(contingency_table.div(contingency_table.iloc[:,-1], axis=0).mul(100, axis=0), 2)
+            elif prop == 'col':
+                ct = round(contingency_table.div(contingency_table.iloc[-1, :], axis=1).mul(100, axis=1), 2)
+            elif prop == 'cell':
+                ct = round(contingency_table.div(contingency_table.iloc[-1,-1], axis=0).mul(100, axis=1), 2)
+        else:
+            ct = contingency_table
+
+        ct.columns = multiindex_columns
+        ct.index = multiindex_index
+        ct.columns.names = multiindex_columns_names
+        ct.index.names = multiindex_index_names
+
+        if not margins: ct = ct.iloc[:-1, :-1]
+
         if test:
             lambda_ = None
 
-            if test.lower() in ["chi-square", "chi2", "fisher"]:
-                test_name = "Chi-square test of independence"
-                report_name = "Pearson Chi-square"
+            if test.lower() == "fisher":
+                if (num_row, num_col) != (2, 2):
+                    raise ValueError("Fisher's exact test is only valid for 2x2 contingency tables.")
 
-            elif test.lower() == "fisher":
                 test_name = "Fisher's exact test"
                 report_name = "Odds ratio"
+
+            elif test.lower() in ["chi-square", "chi2"]:
+                test_name = "Chi-square test of independence"
+                report_name = "Pearson Chi-square"
 
             elif test.lower() in ["g-test", "gtest", "g2"]:
                 test_name = "G-test"
@@ -64,6 +91,7 @@ def crosstab(group1, group2, prop=None, test=False, margins=True,
                     odsl, pl = scipy.stats.fisher_exact(contingency_table.iloc[:-1, :-1], 'less')
                     odsg, pg = scipy.stats.fisher_exact(contingency_table.iloc[:-1, :-1], 'greater')
 
+
                 expected = pd.DataFrame(expected,
                                         index=multiindex_index[:-1],
                                         columns=multiindex_columns[:-1]
@@ -73,10 +101,6 @@ def crosstab(group1, group2, prop=None, test=False, margins=True,
                 expected.index.names = multiindex_index_names
 
             # --- Effect Size Calculations
-            num_row = contingency_table.shape[0] - 1
-            num_col = contingency_table.shape[1] - 1
-            n = contingency_table.iloc[-1, -1]
-
             if contingency_table.iloc[:-1, :-1].size == 4:
                 # --- Cramer's phi = square_root(chi_square / N)
                 es_name = "Cramer's phi"
@@ -95,38 +119,28 @@ def crosstab(group1, group2, prop=None, test=False, margins=True,
                 else:
                     es = np.sqrt(chi2 / (n * min_dim))
 
-
-        ## Setting main crosstabulation table ##
-        if not prop:
-            if not margins:
-                ct = contingency_table.iloc[:-1, :-1]
-            else:
-                ct = contingency_table
-        elif prop == 'row':
-            ct = round(contingency_table.div(contingency_table.iloc[:,-1], axis=0).mul(100, axis=0), 2)
-        elif prop == 'col':
-            ct = round(contingency_table.div(contingency_table.iloc[-1, :], axis=1).mul(100, axis=1), 2)
-        elif prop == 'cell':
-            ct = round(contingency_table.div(contingency_table.iloc[-1,-1], axis=0).mul(100, axis=1), 2)
-
-        ct.columns = multiindex_columns
-        ct.index = multiindex_index
-        ct.columns.names = multiindex_columns_names
-        ct.index.names = multiindex_index_names
-
-        ## Creating the results table ##
-        if test:
-            if test == "fisher":
-                results = {f"{test_name}": [f"{report_name} = ",
-                                            "2 sided p-value = ",
-                                            "Left tail p-value = ",
-                                            "Right tail p-value = ",
-                                            f"{es_name} = "],
-                           "results"     : [round(ods2, 4),
-                                            round(p2, 4),
-                                            round(pl, 4),
-                                            round(pg, 4),
-                                            round(es, 4)]}
+            ## Creating the results table ##
+            if test_name == "Fisher's exact test":
+                if (num_row, num_col) == (2, 2):
+                    results = {f"{test_name}": [f"{report_name} = ",
+                                                "2 sided p-value = ",
+                                                "Left tail p-value = ",
+                                                "Right tail p-value = ",
+                                                f"{es_name} = "],
+                               "results"     : [round(ods2, 4),
+                                                round(p2, 4),
+                                                round(pl, 4),
+                                                round(pg, 4),
+                                                round(es, 4)]
+                               }
+                else:
+                    results = {f"{test_name}": [f"{report_name} = ",
+                                                "p-value = ",
+                                                f"{es_name} = "],
+                               "results"     : [round(ods2, 4),
+                                                round(p2, 4),
+                                                round(es, 4)]
+                               }
 
             else:
                 results = {f"{test_name}": [f"{report_name} ({round(dof, 1)}) = ",
@@ -138,16 +152,16 @@ def crosstab(group1, group2, prop=None, test=False, margins=True,
 
             results_table = pd.DataFrame.from_dict(results)
 
-
-        ## Returning DataFrame objects ##
-        if test:
+            ## Returning DataFrame objects ##
             if expected_freqs:
-                if test_name != "McNemar":
-                    return ct, results_table, expected
-                else:
+                if test_name == "McNemar":
                     print("Expected frequency table is not returned. There is no expected frequency assumption for this test.")
-                    return ct, results_table
+                return ct, results_table, expected
+
             else:
                 return ct, results_table
-        else:
-            return ct
+
+        ## Returning DataFrame objects ##
+        if expected_freqs:
+            print("Expected frequency table is not returned. There is no test specified with expected frequency assumption.")
+        return ct
