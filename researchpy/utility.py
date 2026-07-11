@@ -308,8 +308,7 @@ def base_table(high_level_term_info, mapping_info, info_terms, reg_table):
     current_terms = (pd.DataFrame.from_dict(
         mapping_info, orient="index")).reset_index()
     current_terms.columns = [dv, "term_level_cleaned"]
-    current_terms["term_cleaned"] = [
-        patsy_term_cleaner(key) for key in mapping_info.keys()]
+    current_terms["term_cleaned"] = [patsy_term_cleaner(key) for key in mapping_info.keys()]
 
     # Joining the tables together #
     table = pd.merge(terms, pd.DataFrame.from_dict(term_levels),
@@ -320,6 +319,7 @@ def base_table(high_level_term_info, mapping_info, info_terms, reg_table):
 
     table = pd.merge(table, pd.DataFrame.from_dict(reg_table),
                      how="left", on=dv)
+    #table = pandas.merge(table, pd.DataFrame.from_dict(reg_table).astype(object), how="left", on=dv)  # From dev3.7.1
 
     # Cleaning up final table #
     table[dv] = table["term_level_cleaned"]
@@ -327,13 +327,11 @@ def base_table(high_level_term_info, mapping_info, info_terms, reg_table):
     for idx in table.index:
         if pd.isnull(table.iloc[idx, 6]) and table.iloc[idx][dv] not in list(info_terms.keys())[1:]:
             table.iloc[idx, 6] = "(reference)"
-            table.iloc[idx, 7:] = np.nan
+            table.iloc[idx, 7:] = np.nan            # used to be = ""
         else:
             if table.iloc[idx][dv] in list(info_terms.keys())[1:] and pd.isnull(table.iloc[idx, 6]):
-                table.iloc[idx, 6:] = np.nan
+                table.iloc[idx, 6:] = np.nan        # used to be = ""
 
     table = table[(table.intx == 0) | ((table.intx == 1) & (table.iloc[:, 6] != "(reference)"))]
 
     return table.iloc[:, 5:]
-
-

@@ -9,10 +9,11 @@ authors = [ { name="Corey Bryant", email="ResearchPy.Official@proton.me" }]
 maintainers = [ {name="Corey Bryant", email="ResearchPy.Official@proton.me" }]
 description = "ResearchPy is a Python library for statistical analysis, designed to generate well-structured pandas DataFrame outputs for commonly used descriptive and inferential procedures. It emphasizes readable, publication-oriented results that support reproducible analysis workflows."
 readme = "README.md"
-license = "MIT"
+license = { file="LICENSE" }
 requires-python = ">=3.12"
 classifiers = [
     "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
 keywords = ["researchpy", "statistics"]

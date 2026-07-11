@@ -5,11 +5,16 @@ This module provides the OLS class for fitting linear regression models
 using the ordinary least squares method.
 
 DEPRECATION NOTICE:
-    The `decimals` parameter in the `results()` method is deprecated and is being renamed to `table_decimals` in a future version for better clarity and consistency.
-    It is maintained for backward compatibility with v0.3.7.
+    The `ols` class in this module is maintained for backward compatibility with v0.3.7.
+    It will be deprecated in a future version.
+    New code should use the new API modular structure introduced with this version.
+
+    The `decimals` parameter in the `results()` method is deprecated and is being renamed
+    to `table_decimals` in a future version for better clarity and consistency.
 
 """
 
+import warnings
 import numpy
 import scipy.stats
 import patsy
@@ -22,6 +27,10 @@ from researchpy.predict import predict
 
 class ols(model):
     """
+
+    .. deprecated::
+        The `ols` class is deprecated and will be removed in a future version.
+        Please use the new modular regression interface once available in v0.3.8.
 
     Parameters
     ----------
@@ -64,6 +73,14 @@ class ols(model):
     """
 
     def __init__(self, formula_like, data={}):
+        # Issue deprecation warning
+        warnings.warn(
+            "The 'ols' class is deprecated and will be removed in a future version. "
+            "A new modular regression interface will be available in v0.3.8. "
+            "See documentation for migration guide.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         super().__init__(formula_like, data, matrix_type=1)
 
         self.model_data = {}
@@ -102,16 +119,16 @@ class ols(model):
 
         ###  Sum of Squares
         # Total sum of squares (SSTO)
-        self.model_data["sum_of_square_total"] = float(
-            self.DV.T @ self.DV - (1 / self.nobs) * self.DV.T @ self.model_data["J"] @ self.DV)
+        self.model_data["sum_of_square_total"] = (
+            self.DV.T @ self.DV - (1 / self.nobs) * self.DV.T @ self.model_data["J"] @ self.DV).item()
 
         # Model sum of squares (SSR)
-        self.model_data["sum_of_square_model"] = float(
+        self.model_data["sum_of_square_model"] = (
             self.model_data["betas"].T @ self.IV.T @ self.DV - (1 / self.nobs) * self.DV.T @ self.model_data[
-                "J"] @ self.DV)
+                "J"] @ self.DV).item()
 
         # Error sum of squares (SSE)
-        self.model_data["sum_of_square_residual"] = float(residuals.T @ residuals)
+        self.model_data["sum_of_square_residual"] = (residuals.T @ residuals).item()
 
         ### Degrees of freedom
         # Model
@@ -125,16 +142,13 @@ class ols(model):
 
         ### Mean Square
         # Model (MSR)
-        self.model_data["msr"] = self.model_data["sum_of_square_model"] * (
-                    1 / self.model_data["degrees_of_freedom_model"])
+        self.model_data["msr"] = self.model_data["sum_of_square_model"] * (1/self.model_data["degrees_of_freedom_model"])
 
         # Residual (error; MSE)
-        self.model_data["mse"] = self.model_data["sum_of_square_residual"] * (
-                    1 / self.model_data["degrees_of_freedom_residual"])
+        self.model_data["mse"] = self.model_data["sum_of_square_residual"] * (1/self.model_data["degrees_of_freedom_residual"])
 
-        # Total (MST)
-        self.model_data["mst"] = self.model_data["sum_of_square_total"] * (
-                    1 / self.model_data["degrees_of_freedom_total"])
+        #Total (MST)
+        self.model_data["mst"] = self.model_data["sum_of_square_total"] * (1/self.model_data["degrees_of_freedom_total"])
 
         ## Root Mean Square Error
         self.model_data["root_mse"] = float(numpy.sqrt(self.model_data["mse"]))
@@ -164,8 +178,7 @@ class ols(model):
 
         ### Variance-covariance matrices
         # Non-robust - from Applied Linear Statistical Models, pg. 203
-        self.variance_covariance_residual_matrix = numpy.matrix(
-            self.model_data["mse"] * (self.model_data["I"] - self.model_data["H"]))
+        self.variance_covariance_residual_matrix = numpy.matrix(self.model_data["mse"] * (self.model_data["I"] - self.model_data["H"]))
 
         try:
             self.variance_covariance_beta_matrix = numpy.matrix(
@@ -174,11 +187,11 @@ class ols(model):
             self.variance_covariance_beta_matrix = numpy.matrix(
                 self.model_data["mse"] * numpy.linalg.pinv(self.IV.T @ self.IV))
 
-        # if robust_standard_errors == False:
-        # self.beta_variance_covariance_matrix = np.matrix(self.mse * np.linalg.inv(self.x.T @ self.x))
-        # elif robust_standard_errors == True:
-        ## Not implemented yet so it's same as non-robust
-        #   self.beta_variance_covariance_matrix = np.matrix(self.mse * np.linalg.inv(self.x.T @ self.x))
+        #if robust_standard_errors == False:
+            #self.beta_variance_covariance_matrix = np.matrix(self.mse * np.linalg.inv(self.x.T @ self.x))
+        #elif robust_standard_errors == True:
+            ## Not implemented yet so it's same as non-robust
+         #   self.beta_variance_covariance_matrix = np.matrix(self.mse * np.linalg.inv(self.x.T @ self.x))
 
     def results(self, return_type="Dataframe", decimals=4, pretty_format=True, conf_level=0.95):
 
@@ -195,8 +208,8 @@ class ols(model):
                 lower, upper = scipy.stats.t.interval(conf_level, self.model_data["degrees_of_freedom_residual"],
                                                       loc=beta, scale=se)
 
-                conf_int_lower.append(float(lower))
-                conf_int_upper.append(float(upper))
+                conf_int_lower.append(numpy.asarray(lower).item())
+                conf_int_upper.append(numpy.asarray(upper).item())
 
             except:
 
@@ -206,8 +219,8 @@ class ols(model):
         ### T-stastics
         t_stastics = self.model_data["betas"] * (1 / standard_errors)
         # Two-sided p-value
-        t_p_values = numpy.array([float(scipy.stats.t.sf(numpy.abs(
-            t), self.model_data["degrees_of_freedom_residual"]) * 2) for t in t_stastics])
+        t_p_values = numpy.array([numpy.asarray(scipy.stats.t.sf(numpy.abs(
+            t), self.model_data["degrees_of_freedom_residual"]) * 2).item() for t in t_stastics])
 
         ## Creating variable table information
         regression_description_info = {
@@ -344,8 +357,8 @@ class ols(model):
                     pandas.DataFrame.from_dict(regression_info))
 
         elif return_type == "Dictionary":
-
-            return (descriptives, results, regression_info)
+            #return (descriptives, results, regression_info)   # apart of Feature_SyntaxEngine
+            return (descriptives, results, regression_info.to_dict())
 
         else:
 
@@ -354,5 +367,4 @@ class ols(model):
 
 
     def predict(self, estimate=None):
-
         return predict(self, estimate=estimate)

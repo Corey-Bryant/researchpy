@@ -17,14 +17,6 @@ from researchpy.summary import summarize
 from researchpy.ols import ols
 from researchpy.utility import *
 
-warnings.warn(
-    "The 'anova' class in researchpy.anova is deprecated and will be removed in a future version. "
-    "Please use 'Anova' from researchpy.models.multivariable instead: "
-    "from researchpy.models.multivariable import Anova",
-    DeprecationWarning,
-    stacklevel=2
-)
-
 
 # %% Creating anova class which
 class anova(ols):
@@ -75,6 +67,15 @@ class anova(ols):
 
 
     def __init__(self, formula_like, data={}, sum_of_squares=3):
+        # Issue deprecation warning
+        warnings.warn(
+            "The 'anova' class is deprecated and will be removed in a future version. "
+            "Please use 'Anova' from researchpy.models.multivariable instead: "
+            "from researchpy.models.multivariable import Anova. "
+            "See documentation for migration guide.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         super().__init__(formula_like, data)
         self.__name__ = "researchpy.anova"
 
@@ -167,22 +168,29 @@ class anova(ols):
 
                     
                     # Updating items
+                try:
                     factor_effects["Source"].append(term)
-                    factor_effects["Sum of Squares"].append(
-                        float(sum_of_square_factor))
-                    factor_effects["Degrees of Freedom"].append(
-                        float(degrees_of_freedom_factor))
+                    factor_effects["Sum of Squares"].append(float(sum_of_square_factor))
+                    factor_effects["Degrees of Freedom"].append(float(degrees_of_freedom_factor))
                     factor_effects["Mean Squares"].append(float(msr_f))
                     factor_effects["F value"].append(float(f_value_model))
                     factor_effects["p-value"].append(float(f_p_value_model))
 
                     factor_effects["Eta squared"].append(float(eta_squared_partial))
-                    
                     factor_effects["Epsilon squared"].append(float(epsilon_squared_partial))
-                    
                     factor_effects["Omega squared"].append(float(omega_squared_partial))
-                    #factor_effects["r squared"].append("")
-                    #factor_effects["r squared adj."].append("")
+
+                except:
+                    factor_effects["Source"].append(term)
+                    factor_effects["Sum of Squares"].append(float((sum_of_square_factor).item()))
+                    factor_effects["Degrees of Freedom"].append(float((degrees_of_freedom_factor).item()))
+                    factor_effects["Mean Squares"].append(float((msr_f).item()))
+                    factor_effects["F value"].append(float((f_value_model).item()))
+                    factor_effects["p-value"].append(float((f_p_value_model).item()))
+
+                    factor_effects["Eta squared"].append(float((eta_squared_partial).item()))
+                    factor_effects["Epsilon squared"].append(float((epsilon_squared_partial).item()))
+                    factor_effects["Omega squared"].append(float((omega_squared_partial).item()))
 
                     # Setting new Sum of Square Residual
                     previous_sum_of_squares_error = sum_of_square_residual
@@ -603,19 +611,15 @@ class anova(ols):
                     }
 
         if return_type == "Dataframe":
-
             print("\n"*2, "Note: Effect size values for factors are partial.", "\n"*2)
             return (pandas.DataFrame.from_dict(descriptives, orient="index"), pandas.DataFrame.from_dict(results))
 
         elif return_type == "Dictionary":
-
             print("\n"*2, "Note: Effect size values for factors are partial.", "\n"*2)
             return (descriptives, results)
 
         else:
-
-            print(
-                "Not a valid return type option, please use either 'Dataframe' or 'Dictionary'.")
+            print("Not a valid return type option, please use either 'Dataframe' or 'Dictionary'.")
 
     def regression_table(self, return_type="Dataframe", pretty_format=True,
                          decimals={"Coef.": 2, "Std. Err.": 4, "test_stat": 4, "test_stat_p": 4, "CI": 2,
@@ -624,6 +628,9 @@ class anova(ols):
                          *args):
 
         return super().results(return_type=return_type, pretty_format=pretty_format, decimals=decimals)[2]
+
+    #def regression_table(self, return_type="Dataframe", decimals=4, pretty_format=True, conf_level=0.95):
+    #    return super().results(return_type=return_type, decimals=decimals, pretty_format=pretty_format, conf_level=conf_level)[2]
 
     def predict(self, estimate=None):
         return super().predict(estimate=estimate)
