@@ -3,8 +3,8 @@ import numpy as np
 from researchpy.core.model import CoreModel
 from researchpy.containers import SolverOptions, ModelResults
 
-from researchpy.objective_functions.likelihood import neg_log_likelihood, gradient_neg_log_likelihood
-from researchpy.optimize.iterative_algorithms import scipy_minimize, newton_raphson
+from models.objective_functions.likelihood import neg_log_likelihood, gradient_neg_log_likelihood
+from models.optimize.iterative_algorithms import scipy_minimize, newton_raphson
 from researchpy.models.postestimation import LikelihoodRatioTest
 
 from researchpy.models.postestimation.predict import predict

@@ -3,7 +3,6 @@ from scipy.special import expit
 
 def log_likelihood(y_e):
 
-    #return np.sum(y_e - np.sum(np.log((1 + y_e))))
     return np.sum(y_e) - np.sum(np.log((1 + y_e)))
 
 

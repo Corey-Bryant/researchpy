@@ -5,7 +5,7 @@ from researchpy.utility import *
 from researchpy.models.postestimation.predict import predict
 from researchpy.containers import ModelFit, FitStatistics, ModelEffects, CoefResults, ModelTerms, SolverOptions
 
-from researchpy.optimize.trackers import OptimizationTracker
+from models.optimize.trackers import OptimizationTracker
 
 
 
