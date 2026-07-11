@@ -17,7 +17,6 @@ DEPRECATION NOTICE:
 import warnings
 import numpy
 import scipy.stats
-import patsy
 import pandas
 
 from researchpy.model import model

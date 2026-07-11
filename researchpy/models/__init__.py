@@ -15,15 +15,21 @@ Usage:
 
 """
 
-from researchpy.models.base import CoreModel
-#from researchpy.models.core_model import CoreModel
-from researchpy.models.general_model import GeneralModel
+
+def __getattr__(name: str):
+    """Lazy imports to avoid circular dependency during package initialization."""
+    if name == "CoreModel":
+        from researchpy.models.base import CoreModel
+        return CoreModel
+    if name == "GeneralModel":
+        from researchpy.models.general_model import GeneralModel
+        return GeneralModel
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 # Define what gets exported with "from researchpy.models import *"
 __all__ = [
     "CoreModel",
     "GeneralModel",
-    #"ModelResults",
-    #"TestResults",
 ]
 

@@ -1,12 +1,12 @@
 from typing import Any
 from pandas import DataFrame
 
-from researchpy.core.model import CoreModel
+from researchpy.core.model import BaseModel
 from researchpy.containers import ModelResults, FactorEffects, SolverOptions
 from researchpy.utility import *
 
 
-class LinearModel(CoreModel):
+class LinearModel(BaseModel):
     """
 
     This is a subclass of core_model for linear statistical models that use ordinary least squares.
@@ -29,7 +29,8 @@ class LinearModel(CoreModel):
 
 
         # OLS fit to compute the coefficients (betas) — stored in self.CoefResults.betas
-        self._CoreModel__ols_fit()
+        #self._CoreModel__ols_fit()
+        self._BaseModel__ols_fit()
 
         # Compute the model sum of squares, degrees of freedom, mean squares, F-value, p-value,
         # and effect size measures — stored in self.ModelEffects
@@ -54,7 +55,7 @@ class LinearModel(CoreModel):
             for t in self.CoefResults.test_stat
         ])
 
-        self._CoreModel__compute_confidence_intervals()
+        self._BaseModel__compute_confidence_intervals()
 
 
     def __variance_covariance_residual_matrix(self, method="standard", to_return=True, add_to_self=False):

@@ -27,7 +27,6 @@ Or attribute access::
 
 from __future__ import annotations
 
-#from core.containerclasses import CoreDataclass
 from .base import CoreDataclass
 from dataclasses import dataclass, field, fields
 from typing import Union, Any, Dict, Optional

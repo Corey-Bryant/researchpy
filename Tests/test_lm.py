@@ -1,6 +1,7 @@
 import pytest
 import pandas as pd
-from researchpy.MultivariableRegression.lm import lm
+#from researchpy.MultivariableRegression.lm import lm
+from researchpy.models.multivariable import LM as lm
 
 def test_lm_initialization():
     # Create sample data

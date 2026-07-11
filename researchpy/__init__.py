@@ -23,8 +23,8 @@ from .anova import anova
 # New modular structure imports
 from .core.data_utils import as_array, validate_array
 
-from .models import CoreModel, GeneralModel
-from .models.multivariable import Regress, LinearRegression, LM, Anova, ANOVA, LogisticRegression, Logistic
+from researchpy.models import CoreModel, GeneralModel
+from researchpy.models.multivariable import Regress, LinearRegression, LM, Anova, ANOVA, LogisticRegression, Logistic
 
 # Statistical summary subpackage
 from .statistics import *

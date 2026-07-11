@@ -1,16 +1,15 @@
 import numpy as np
 
-from researchpy.core.model import CoreModel
+from researchpy.core.model import BaseModel
 from researchpy.containers import SolverOptions, ModelResults
 
-from models.objective_functions.likelihood import neg_log_likelihood, gradient_neg_log_likelihood
-from models.optimize.iterative_algorithms import scipy_minimize, newton_raphson
+from researchpy.models.objective_functions.likelihood import neg_log_likelihood, gradient_neg_log_likelihood
+from researchpy.models.optimize.iterative_algorithms import scipy_minimize, newton_raphson
 from researchpy.models.postestimation import LikelihoodRatioTest
-
 from researchpy.models.postestimation.predict import predict
 
 
-class GeneralModel(CoreModel):
+class GeneralModel(BaseModel):
     """
 
     This is a subclass of core_model for generalized statistical models such as logistic, poisson, and etc.
@@ -60,7 +59,7 @@ class GeneralModel(CoreModel):
                 raise ValueError(f"initial_betas must be a numpy array of shape ({self.k}, 1), but got {initial_betas.shape}")
 
         elif initial_betas_method.lower() == "ols":
-            self._CoreModel__ols_fit()
+            self._BaseModel__ols_fit()
 
         # Default initialization based on model type
         else:

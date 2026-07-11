@@ -167,7 +167,7 @@ class LogisticRegression(GeneralModel):
         self.CoefResults.test_pval = 2 * norm.sf(np.abs(self.CoefResults.test_stat))
 
         # Compute confidence intervals
-        self._CoreModel__compute_confidence_intervals()
+        self._BaseModel__compute_confidence_intervals()
 
 
 

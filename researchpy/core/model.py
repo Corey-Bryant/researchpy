@@ -6,7 +6,7 @@ from researchpy.utility import *
 from researchpy.models.postestimation.predict import predict
 from researchpy.containers import ModelFit, FitStatistics, ModelEffects, CoefResults, ModelTerms, SolverOptions
 
-from models.optimize.trackers import OptimizationTracker
+from researchpy.models.optimize.trackers import OptimizationTracker
 
 
 
@@ -15,7 +15,7 @@ from models.optimize.trackers import OptimizationTracker
 # Base model class for regression models. This class is not meant to be used directly, but rather to be inherited by
 # specific regression model classes (e.g., OLS, Logistic, etc.). It contains common functionality and attributes that
 # are shared across different types of regression models.
-class CoreModel(DMatrix):
+class BaseModel(DMatrix):
     """
 
     This is the base -model- object for Researchpy. By default, missing
@@ -37,7 +37,7 @@ class CoreModel(DMatrix):
                  family="gaussian", link="normal",
                  solver_options=None, table_decimals=None):
 
-        self.__name__ = "Researchpy.CoreModel"
+        self.__name__ = "Researchpy.BaseModel"
         self._beta_type = "coef"
 
         super().__init__(formula_like, data, output="numpy")

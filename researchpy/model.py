@@ -13,17 +13,9 @@ DEPRECATION NOTICE:
     The new modular structure provides better organization and more functionality.
 """
 import warnings
-import numpy
-import scipy.stats
 import patsy
-import pandas
-from .summary import summarize
 from .utility import *
 
-# Import new classes for those transitioning to the new structure
-# These provide convenient access from the old location
-from researchpy.models import CoreModel, GeneralModel
-from researchpy.models.multivariable import LogisticRegression, Logistic
 
 class model():
     """
