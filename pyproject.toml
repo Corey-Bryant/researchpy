@@ -7,7 +7,7 @@ name = "researchpy"
 version = "0.4.0"
 authors = [ { name="Corey Bryant", email="ResearchPy.Official@proton.me" }]
 maintainers = [ {name="Corey Bryant", email="ResearchPy.Official@proton.me" }]
-description = "Researchpy produces Pandas DataFrames that contain relevant statistical testing information that is commonly required for academic research."
+description = "ResearchPy is a Python library for statistical analysis, designed to generate well-structured pandas DataFrame outputs for commonly used descriptive and inferential procedures. It emphasizes readable, publication-oriented results that support reproducible analysis workflows."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
@@ -18,7 +18,7 @@ classifiers = [
 keywords = ["researchpy", "statistics"]
 dependencies = [
     'scipy>=1.17.1',
-    'numpy>=2.4.2',
+    'numpy>=2.5.0',
     'pandas>=3.0.1',
     'statsmodels>=0.14.0',
     'patsy>=1.0.2',
