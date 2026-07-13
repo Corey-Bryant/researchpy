@@ -748,7 +748,7 @@ class ModelTerms(CoreDataclass):
         Parameters
         ----------
         model_spec : formulaic.ModelSpec
-            Typically ``mm.rhs.model_spec`` from a formulaic DMatrix.
+            Typically ``mm.rhs.model_spec`` from a formulaic ModelMatrix.
 
         Returns
         -------

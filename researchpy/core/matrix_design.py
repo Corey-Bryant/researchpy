@@ -1,9 +1,8 @@
-import scipy.stats
 import formulaic
 
 from typing import Any, Dict, List, Optional, Union
 
-from researchpy.utility import variable_information
+from researchpy.core.syntax_engine import variable_information
 from researchpy.containers import ModelTerms
 
 
@@ -66,7 +65,7 @@ class DesignMatrix():
 
 
 
-class DMatrix():
+class ModelMatrix():
 
     def __init__(self, formula_like:str, data:object ={}, output:str ="numpy",
                  include_intercept:bool =True, ensure_full_rank:bool =True) -> None:

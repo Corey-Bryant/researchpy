@@ -39,7 +39,7 @@ def mean(arg1: Any = None, arg2: Any = None, /, *,
         - Series/ndarray/list: compute mean directly
         - str: Patsy-style formula (e.g., "y ~ C(x)")
         - list of str: column names in a DataFrame
-    arg2 : pd.DataFrame, optional
+    arg2 : pandas.DataFrame, optional
         DataFrame when arg1 is a formula or column list.
     dv : str or list of str, optional
         Dependent variable column name(s).
@@ -51,7 +51,7 @@ def mean(arg1: Any = None, arg2: Any = None, /, *,
         Row grouping variable(s) for cell means.
     over : str or list of str, optional
         Column grouping variable(s) for pivot layout. Requires by.
-    data : pd.DataFrame, optional
+    data : pandas.DataFrame, optional
         Data source when using keyword arguments.
     decimals : int, optional
         Number of decimal places to round to. Default is 4.
@@ -236,7 +236,7 @@ def quartiles(
     0  a  1.5  2.0  2.5
     1  b  4.5  5.0  5.5
     """
-    from ..core.spec import resolve
+    from ..core.syntax_engine import resolve
     from ..core.matrix_engine import _build_cell_series
 
     spec = resolve(arg1, arg2, dv=dv, iv=iv, by=by, over=over, data=data)
@@ -476,7 +476,7 @@ def percentile(
     0  a  1.5  2.0  2.5
     1  b  4.5  5.0  5.5
     """
-    from ..core.spec import resolve
+    from ..core.syntax_engine import resolve
     from ..core.matrix_engine import _build_cell_series
 
     # Normalize q to a list

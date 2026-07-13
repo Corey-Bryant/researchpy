@@ -125,7 +125,7 @@ def confidence_interval(
 
     # For ungrouped, single-DV case: return tuple directly
     # For grouped/multi-DV: use the routing infrastructure with a custom approach
-    from ..core.spec import resolve
+    from ..core.syntax_engine import resolve
 
     spec = resolve(arg1, arg2, dv=dv, iv=iv, by=by, over=over, data=data)
 

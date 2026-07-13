@@ -12,10 +12,13 @@ Usage:
 """
 
 from .data_utils import as_array, validate_array
-from researchpy.core.matrix_design import DesignMatrices, DesignMatrix, DMatrix
+from researchpy.core.matrix_design import DesignMatrices, DesignMatrix, ModelMatrix
 from researchpy.core.model import BaseModel
-from .spec import ComputeSpec, TermSpec, resolve
+from .syntax_engine import SyntaxSpec, TermSpec, resolve
 from .matrix_engine import build_indicator_matrix, grouped_statistic, grouped_statistic_pivot
+
+# Backward-compatible alias
+ComputeSpec = SyntaxSpec
 
 
 # Define what gets exported with "from researchpy.core import *"
@@ -24,9 +27,10 @@ __all__ = [
     'validate_array',
     'DesignMatrices',
     'DesignMatrix',
-    'DMatrix',
+    'ModelMatrix',
     'BaseModel',
-    'ComputeSpec',
+    'SyntaxSpec',
+    'ComputeSpec',  # backward-compatible alias
     'TermSpec',
     'resolve',
     'build_indicator_matrix',

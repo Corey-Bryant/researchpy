@@ -19,7 +19,7 @@ from typing import Any, Callable, List, Optional, Union
 import numpy
 import pandas
 
-from ..core.spec import resolve, ComputeSpec
+from ..core.syntax_engine import resolve, SyntaxSpec
 from ..core.data_utils import validate_array
 from ..core.matrix_engine import grouped_statistic, grouped_statistic_pivot, _build_cell_series
 
@@ -119,7 +119,7 @@ def _route_computation(arg1: Any,
 
     This is the shared backbone for all descriptive functions that support
     the 5 calling conventions. It:
-    1. Calls ``resolve()`` to normalize any input form into a ``ComputeSpec``
+    1. Calls ``resolve()`` to normalize any input form into a ``SyntaxSpec``
     2. Routes based on the spec layout:
        - No groups → scalar (single DV) or DataFrame (multiple DVs)
        - sub_specs → mixed formula: compute each term, stack with Term column
@@ -190,7 +190,7 @@ def _route_computation(arg1: Any,
 
 
 def _compute_marginal(
-    spec: ComputeSpec,
+    spec: SyntaxSpec,
     scalar_func: Callable,
     matrix_stat: Optional[str],
     decimals: int,
@@ -232,7 +232,7 @@ def _compute_marginal(
 
 
 def _compute_cell(
-    spec: ComputeSpec,
+    spec: SyntaxSpec,
     scalar_func: Callable,
     matrix_stat: Optional[str],
     decimals: int,
@@ -272,7 +272,7 @@ def _compute_cell(
 
 
 def _compute_pivot(
-    spec: ComputeSpec,
+    spec: SyntaxSpec,
     scalar_func: Callable,
     matrix_stat: Optional[str],
     decimals: int,
@@ -338,7 +338,7 @@ def _compute_pivot(
 
 
 def _compute_mixed(
-    spec: ComputeSpec,
+    spec: SyntaxSpec,
     scalar_func: Callable,
     matrix_stat: Optional[str],
     decimals: int,
@@ -353,7 +353,7 @@ def _compute_mixed(
 
     Parameters
     ----------
-    spec : ComputeSpec
+    spec : SyntaxSpec
         The resolved spec with sub_specs populated.
     scalar_func : callable
         Scalar computation function.

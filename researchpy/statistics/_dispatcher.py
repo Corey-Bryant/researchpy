@@ -461,7 +461,7 @@ def estable(
     )
 
     if use_spec:
-        from ..core.spec import resolve
+        from ..core.syntax_engine import resolve
         spec = resolve(arg1, arg2, dv=dv, iv=iv, by=by, over=over, data=data)
 
         # Grouped computation

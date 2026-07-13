@@ -1,8 +1,6 @@
 import pandas as pd
 import scipy.stats
 import numpy as np
-import re
-import itertools
 
 
 def rounder(lst, decimals=4, in_place=True):
@@ -69,196 +67,34 @@ def as_numeric(value):
 
 
 def patsy_column_cleaner(factor):
+    """Thin backward-compatible wrapper.
+
+    Delegates to :func:`researchpy.core.syntax_engine.clean_column_name`.
+    New code should import ``clean_column_name`` directly.
     """
-
-    Parameters
-    ----------
-    factor : A list of factors and levels which is provided by Patsy's design_info.column_names object.
-
-
-    Returns
-    -------
-    String
-
-
-    Description
-    -----------
-    This function returns a level name as a string.
-
-    Ex.
-    column_names = ['Intercept',
-                    'C(drug, Treatment(2))[T.1]',
-                    'C(drug, Treatment(2))[T.3]',
-                    'C(drug, Treatment(2))[T.4]',
-                    'disease',
-                    'C(drug, Treatment(2))[T.1]:disease',
-                    'C(drug, Treatment(2))[T.3]:disease',
-                    'C(drug, Treatment(2))[T.4]:disease']
-
-
-    [IN]  [patsy_column_cleaner(level) for level in column_names]
-    [OUT] ['Intercept', '1', '3', '4', 'disease', '1:disease', '3:disease', '4:disease']
-
-
-    """
-
-    treatment_reference_pattern = re.compile(r'(?<=Treatment\()(.*?)(?=\))')
-    factor_pattern = re.compile(r'(?<=C\()(.*?)(?=,|\))')
-    level_pattern = re.compile(r'(?<=\[..)(.*?)(?=\])')
-
-    factor = factor.split(":")
-
-    # This renames non-interaction term names
-    if len(factor) == 1:
-        # This renames categorical variables
-        if factor[0].startswith("C("):
-
-            var_name = re.findall(level_pattern, factor[0])
-            return var_name[0]
-
-        else:
-            # This keeps non-categorical variables names the same
-            return factor[0]
-    else:
-
-        var_name = []
-
-        for level in factor:
-            if "C(" in level:
-
-                var_name.append(''.join(re.findall(level_pattern, level)))
-            else:
-                var_name.append(level)
-
-        return ':'.join(var_name)
+    from researchpy.core.syntax_engine import clean_column_name
+    return clean_column_name(factor)
 
 
 def patsy_term_cleaner(factor):
+    """Thin backward-compatible wrapper.
+
+    Delegates to :func:`researchpy.core.syntax_engine.clean_term_name`.
+    New code should import ``clean_term_name`` directly.
     """
-
-
-    Parameters
-    ----------
-    factor : A list of factors and levels which is provided by Patsy's design_info.term_names object.
-
-    Returns
-    -------
-    String
-
-
-    Description
-    -----------
-    This function returns a level name as a string.
-
-    Ex.
-    term_names = ['Intercept',
-                  'C(drug, Treatment(2))',
-                  'disease',
-                  'C(drug, Treatment(2)):disease']
-
-
-    [IN]  [patsy_term_cleaner(term) for term in term_names]
-    [OUT] ['Intercept', 'drug', 'disease', 'drug:disease']
-
-    """
-
-    factor_pattern = re.compile(r'(?<=C\()(.*?)(?=,|\))')
-
-    factor = factor.split(":")
-
-    # This renames non-interaction term names
-    if len(factor) == 1:
-        # This renames categorical variables
-        if factor[0].startswith("C("):
-
-            var_name = ''.join(re.findall(factor_pattern, factor[0]))
-            return var_name
-
-        else:
-            # This keeps non-categorical variables names the same
-            return factor[0]
-    else:
-
-        var_name = []
-
-        for level in factor:
-            if "C(" in level:
-
-                var_name.append(''.join(re.findall(factor_pattern, level)))
-            else:
-                var_name.append(level)
-
-        return ':'.join(var_name)
+    from researchpy.core.syntax_engine import clean_term_name
+    return clean_term_name(factor)
 
 
 
 def variable_information(term_names, column_names, data):
+    """Thin backward-compatible wrapper.
 
-    factor_pattern = re.compile(r'(?<=C\()(.*?)(?=\)|,)')
-
-    patsy_factor_information = {}
-    my_factor_information = {}
-
-    for factor in term_names:
-
-        if factor == "Intercept" or "C(" not in factor:
-
-            my_factor_information[factor] = factor
-            patsy_factor_information[factor] = factor
-
-        else:
-
-            factor_split = factor.split(":")
-
-            if len(factor_split) == 1:
-
-                variable = (re.findall(factor_pattern, factor_split[0]))[0]
-                variable_levels = list(np.unique(
-                    data[variable][~data[variable].isnull()]))
-                variable_levels = [str(level) for level in variable_levels]
-
-                my_factor_information[variable] = variable_levels
-                patsy_factor_information[factor_split[0]] = variable
-
-            else:
-
-                interaction_terms = []
-                interaction_terms_levels = []
-
-                for intfact in factor_split:
-
-                    # Checking if it's a categorical factor
-                    if intfact.startswith("C("):
-
-                        variable = (re.findall(factor_pattern, intfact))[0]
-                        variable_levels = list(np.unique(data[variable]))
-                        variable_levels = [str(level)
-                                           for level in variable_levels]
-
-                        interaction_terms.append(variable)
-                        interaction_terms_levels.append(variable_levels)
-
-                    # This is for non-categorical factors in the model
-                    else:
-                        interaction_terms.append(intfact)
-                        interaction_terms_levels.append([intfact])
-
-                # Creating all combinations of interaction terms
-                interaction_terms_var_names_interactions = list(
-                    itertools.product(*interaction_terms_levels))
-                interaction_terms_var_names_interactions = [
-                    ":".join(level) for level in interaction_terms_var_names_interactions]
-
-                my_factor_information[':'.join(
-                    interaction_terms)] = interaction_terms_var_names_interactions
-                patsy_factor_information[factor] = ':'.join(interaction_terms)
-
-    ## Creating left hand of regression output ##
-    mapping = {}
-    for column_name in column_names:
-        mapping[column_name] = patsy_column_cleaner(column_name)
-
-    return patsy_factor_information, mapping, my_factor_information
+    Delegates to :func:`researchpy.core.syntax_engine.variable_information`.
+    New code should import from ``researchpy.core.syntax_engine`` directly.
+    """
+    from researchpy.core.syntax_engine import variable_information as _variable_information
+    return _variable_information(term_names, column_names, data)
 
 
 

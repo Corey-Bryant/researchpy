@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Union
 import numpy
 import pandas
 
-from ..core.spec import resolve, ComputeSpec
+from ..core.syntax_engine import resolve, SyntaxSpec
 from ..core.data_utils import validate_array
 from ..core.matrix_engine import (
     build_indicator_matrix,
@@ -125,7 +125,7 @@ def describe(
     return _describe_grouped(spec, spec.by, decimals)
 
 
-def _describe_ungrouped(spec: ComputeSpec, decimals: int) -> pandas.DataFrame:
+def _describe_ungrouped(spec: SyntaxSpec, decimals: int) -> pandas.DataFrame:
     """Compute descriptive stats for ungrouped data."""
     rows = []
     for dv_col in spec.dv:
@@ -143,7 +143,7 @@ def _describe_ungrouped(spec: ComputeSpec, decimals: int) -> pandas.DataFrame:
 
 
 def _describe_grouped(
-    spec: ComputeSpec,
+    spec: SyntaxSpec,
     groups: List[str],
     decimals: int,
 ) -> pandas.DataFrame:
@@ -164,7 +164,7 @@ def _describe_grouped(
     return pandas.concat(frames, ignore_index=True)
 
 
-def _describe_marginal(spec: ComputeSpec, decimals: int) -> pandas.DataFrame:
+def _describe_marginal(spec: SyntaxSpec, decimals: int) -> pandas.DataFrame:
     """Compute descriptive stats for each iv variable independently, stack."""
     frames = []
     for dv_col in spec.dv:
@@ -187,7 +187,7 @@ def _describe_marginal(spec: ComputeSpec, decimals: int) -> pandas.DataFrame:
     return pandas.concat(frames, ignore_index=True)
 
 
-def _describe_mixed(spec: ComputeSpec, decimals: int) -> pandas.DataFrame:
+def _describe_mixed(spec: SyntaxSpec, decimals: int) -> pandas.DataFrame:
     """Compute descriptive stats for mixed formulas (sub_specs)."""
     frames = []
     for ts in spec.sub_specs:

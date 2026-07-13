@@ -80,6 +80,9 @@ rp.summary_cat(df["group"])
 - numpy ≥ 2.5.0
 - scipy ≥ 1.17.1
 - statsmodels ≥ 0.14.0
+- patsy ≥ 1.0.2 (for legacy formula parsing, will be removed in future versions)
+- requests ≥ 2.20.0
+- formulaic ≥ 1.2.2 (for new formula parsing)
 
 ## Documentation
 
@@ -104,4 +107,4 @@ print(researchpy.__version__)
 
 Current citation with version number:
 
-> Bryant, C. (2018–2026). *researchpy* (Version 0.4.0) [Python package]. https://github.com/Corey-Bryant/researchpy
+> Bryant, C. (2018–2026). *researchpy* (Version 0.3.8) [Python package]. https://github.com/Corey-Bryant/researchpy
