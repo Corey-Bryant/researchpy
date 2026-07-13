@@ -17,9 +17,6 @@ from researchpy.core.model import BaseModel
 from .syntax_engine import SyntaxSpec, TermSpec, resolve
 from .matrix_engine import build_indicator_matrix, grouped_statistic, grouped_statistic_pivot
 
-# Backward-compatible alias
-ComputeSpec = SyntaxSpec
-
 
 # Define what gets exported with "from researchpy.core import *"
 __all__ = [
@@ -30,7 +27,6 @@ __all__ = [
     'ModelMatrix',
     'BaseModel',
     'SyntaxSpec',
-    'ComputeSpec',  # backward-compatible alias
     'TermSpec',
     'resolve',
     'build_indicator_matrix',

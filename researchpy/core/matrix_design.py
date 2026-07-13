@@ -83,7 +83,9 @@ class ModelMatrix():
         if not include_intercept:
             formula_like = formula_like + " + 0"
 
-        self.mm = formulaic.model_matrix(formula_like, data, output=output, ensure_full_rank=ensure_full_rank)
+        self.mm = formulaic.model_matrix(formula_like, data,
+                                         output=output,
+                                         ensure_full_rank=ensure_full_rank)
         self.DV = self.mm.lhs
         self.IV = self.mm.rhs
 

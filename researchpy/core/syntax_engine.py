@@ -162,19 +162,11 @@ class SyntaxSpec(CoreDataclass):
     # ------------------------------------------------------------------
 
     @classmethod
-    def from_args(
-        cls,
-        arg1: Any = None,
-        arg2: Any = None,
-        /,
-        *,
-        dv: Optional[Union[str, List[str]]] = None,
-        iv: Optional[Union[str, List[str]]] = None,
-        by: Optional[Union[str, List[str]]] = None,
-        over: Optional[Union[str, List[str]]] = None,
-        data: Optional[pd.DataFrame] = None,
-        weights: Optional[str] = None,
-    ) -> "SyntaxSpec":
+    def from_args(cls, arg1: Any = None, arg2: Any = None, /, *,
+                  dv: Optional[Union[str, List[str]]] = None, iv: Optional[Union[str, List[str]]] = None,
+                  by: Optional[Union[str, List[str]]] = None, over: Optional[Union[str, List[str]]] = None,
+                  data: Optional[pd.DataFrame] = None,
+                  weights: Optional[str] = None, ) -> "SyntaxSpec":
         """Resolve any supported calling convention into a SyntaxSpec.
 
         This is the universal input gate. Every researchpy function calls
@@ -368,12 +360,8 @@ class SyntaxSpec(CoreDataclass):
 
 
     @staticmethod
-    def _to_formula(
-        dv: Optional[List[str]] = None,
-        iv: Optional[List[str]] = None,
-        by: Optional[List[str]] = None,
-        over: Optional[List[str]] = None,
-    ) -> Optional[str]:
+    def _to_formula(dv: Optional[List[str]] = None, iv: Optional[List[str]] = None, by: Optional[List[str]] = None,
+                    over: Optional[List[str]] = None,) -> Optional[str]:
         """Build a formula string from keyword spec parameters.
 
         Used internally by ``from_args()`` to generate a formula for specs
@@ -510,8 +498,7 @@ def resolve(arg1: Any = None, arg2: Any = None, /, *,
             by: Optional[Union[str, List[str]]] = None,
             over: Optional[Union[str, List[str]]] = None,
             data: Optional[pd.DataFrame] = None,
-            weights: Optional[str] = None,
-            ) -> SyntaxSpec:
+            weights: Optional[str] = None,) -> SyntaxSpec:
     """Resolve any supported calling convention into a SyntaxSpec.
 
     Backward-compatible module-level wrapper around
@@ -538,11 +525,7 @@ def resolve(arg1: Any = None, arg2: Any = None, /, *,
     )
 
 
-def _resolve_groupby(
-    groupby_obj: Any,
-    weights: Optional[str] = None,
-    cls: type = None,
-) -> SyntaxSpec:
+def _resolve_groupby(groupby_obj: Any, weights: Optional[str] = None, cls: type = None,) -> SyntaxSpec:
     """Resolve a pandas GroupBy object into a SyntaxSpec.
 
     Extracts group key names and reconstructs the underlying data as a
@@ -631,8 +614,7 @@ def _extract_group_column(groupby_obj: Any, key: str) -> Optional[Any]:
     return None
 
 
-def _parse_formula(formula: str, data: pd.DataFrame,
-                   weights: Optional[str] = None, cls: type = None, ) -> SyntaxSpec:
+def _parse_formula(formula: str, data: pd.DataFrame, weights: Optional[str] = None, cls: type = None,) -> SyntaxSpec:
     """Parse a formula string into a SyntaxSpec using formulaic's parser.
 
     Detects the formula operator pattern to determine layout:
@@ -796,10 +778,7 @@ def _parse_formula(formula: str, data: pd.DataFrame,
         )
 
 
-def _is_star_expansion(
-    main_effect_terms: List[Any],
-    interaction_terms: List[Any],
-) -> bool:
+def _is_star_expansion(main_effect_terms: List[Any], interaction_terms: List[Any], ) -> bool:
     """Detect whether a set of main effects + interactions is a star expansion.
 
     A star expansion occurs when the main effect variable names exactly match
@@ -837,11 +816,7 @@ def _is_star_expansion(
     return True
 
 
-def _build_sub_specs(
-    main_effect_terms: List[Any],
-    interaction_terms: List[Any],
-    data: pd.DataFrame,
-) -> List[TermSpec]:
+def _build_sub_specs(main_effect_terms: List[Any], interaction_terms: List[Any], data: pd.DataFrame,) -> List[TermSpec]:
     """Build TermSpec list from a mixed formula's terms.
 
     Main effect terms get layout="iv" (marginal computation).
@@ -914,7 +889,6 @@ def _validate_columns(columns: List[str], data: pd.DataFrame, label: str) -> Non
 # ------------------------------------------------------------------
 # Syntax cleaning utilities (moved from utility.py)
 # ------------------------------------------------------------------
-
 def clean_term_name(factor: str) -> str:
     """Extract clean variable name(s) from a formula term string.
 
@@ -1013,11 +987,8 @@ def clean_column_name(factor: str) -> str:
         return ':'.join(var_name)
 
 
-def variable_information(
-    term_names: List[str],
-    column_names: List[str],
-    data: pd.DataFrame,
-) -> Tuple[Dict[str, str], Dict[str, str], Dict[str, Any]]:
+def variable_information(term_names: List[str], column_names: List[str],
+                         data: pd.DataFrame,) -> Tuple[Dict[str, str], Dict[str, str], Dict[str, Any]]:
     """Extract factor/variable metadata from formula term and column names.
 
     Builds three mappings used by model output formatting:
