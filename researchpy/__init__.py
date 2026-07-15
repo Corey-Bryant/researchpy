@@ -21,7 +21,7 @@ from .anova import anova
 
 
 # New modular structure imports
-from .core.data_utils import as_array, validate_array
+from researchpy.core import BaseModel, as_array, validate_array
 
 from researchpy.models import CoreModel, GeneralModel
 from researchpy.models.multivariable import Regress, LinearRegression, LM, Anova, ANOVA, LogisticRegression, Logistic

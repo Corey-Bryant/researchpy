@@ -723,7 +723,6 @@ class ModelTerms(CoreDataclass):
         mt[1].is_interaction  # True
     """
 
-    #model_terms: dict = field(default_factory=dict)   # dict[str, Term]
     terms: list = field(default_factory=list)   # list[Term]
     #dv: Optional[list] = None                   # list[str] — dependent variable names
 
