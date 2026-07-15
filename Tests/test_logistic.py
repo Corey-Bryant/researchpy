@@ -1,6 +1,6 @@
 import pytest
 import pandas as pd
-from researchpy.MultivariableRegression.logistic import logistic
+from researchpy.models.multivariable import logistic
 
 def test_logistic_initialization():
     # Create sample data

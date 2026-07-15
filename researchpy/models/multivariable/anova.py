@@ -327,8 +327,8 @@ class Anova(LinearModel):
         super().__init__(formula_like, data, conf_level=conf_level, table_decimals=table_decimals)
 
         self.__name__ = "Researchpy.ANOVA"
-        self.ModelFit.model_type = self.__name__
-        self.ModelFit.model_display_name = self._get_model_display_name()
+        self.ModelDesignSpec.model_type = self.__name__
+        self.ModelDesignSpec.model_display_name = self._get_model_display_name()
 
         # Validate sum_of_squares parameter
         valid_ss_types = [1, 2, 3, "I", "II", "III"]
@@ -518,7 +518,7 @@ class Anova(LinearModel):
 
         # Re-fit the model using Sum coding via formulaic
         full_model_formula = (
-            self.ModelFit.dv_term_names[0]
+            self.ModelDesignSpec.dv_term_names[0]
             + " ~ "
             + " + ".join(t for t in the_terms_3 if t != "1")
         )
@@ -697,7 +697,7 @@ class Anova(LinearModel):
                 table = model_summary_df.copy()
 
 
-        model_display = self.ModelFit.model_display_name
+        model_display = self.ModelDesignSpec.model_display_name
 
 
         lines = []

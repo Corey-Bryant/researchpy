@@ -1043,12 +1043,12 @@ def variable_information(term_names: List[str], column_names: List[str],
 
             if len(factor_split) == 1:
                 variable = (re.findall(factor_pattern, factor_split[0]))[0]
-                variable_levels = list(np.unique(
-                    data[variable][~data[variable].isnull()]))
+                variable_levels = list(np.unique(data[variable][~data[variable].isnull()]))
                 variable_levels = [str(level) for level in variable_levels]
 
                 factor_info[variable] = variable_levels
                 high_level_term_info[factor_split[0]] = variable
+
             else:
                 interaction_terms = []
                 interaction_terms_levels = []
@@ -1060,14 +1060,13 @@ def variable_information(term_names: List[str], column_names: List[str],
                         variable_levels = [str(level) for level in variable_levels]
                         interaction_terms.append(variable)
                         interaction_terms_levels.append(variable_levels)
+
                     else:
                         interaction_terms.append(intfact)
                         interaction_terms_levels.append([intfact])
 
-                interaction_combos = list(
-                    itertools.product(*interaction_terms_levels))
-                interaction_combos = [
-                    ":".join(level) for level in interaction_combos]
+                interaction_combos = list(itertools.product(*interaction_terms_levels))
+                interaction_combos = [":".join(level) for level in interaction_combos]
 
                 factor_info[':'.join(interaction_terms)] = interaction_combos
                 high_level_term_info[factor] = ':'.join(interaction_terms)

@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import scipy.stats
 
-from researchpy.descriptive import (
+from researchpy.statistics import (
     n_obs,
     n_missing,
     percent_missing,
@@ -28,7 +28,6 @@ from researchpy.descriptive import (
     confidence_interval,
     skewness,
     kurtosis,
-    summarize,
 )
 from researchpy.containers import SummaryResult
 

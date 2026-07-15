@@ -1,5 +1,5 @@
 import pandas as pd
-from researchpy.model import core_model
+from researchpy.model import model as core_model
 
 def test_core_model_initialization():
     # Create sample data

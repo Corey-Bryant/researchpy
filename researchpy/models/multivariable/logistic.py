@@ -260,7 +260,7 @@ class LogisticRegression(GeneralModel):
         n = tp + fp + fn + tn
 
         # --- Build confusion matrix table ---
-        dv_name = self.ModelFit.dv_term_names[0]
+        dv_name = self.ModelDesignSpec.dv_term_names[0]
         col_positive = f"{dv_name}=1"
         col_negative = f"{dv_name}=0"
 

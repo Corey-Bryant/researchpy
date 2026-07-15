@@ -83,8 +83,8 @@ class GeneralModel(BaseModel):
             IV=self.IV,
             DV=self.DV,
             solver_options=self.solver_options,
-            distribution_family=self.ModelFit.family,
-            link_function=self.ModelFit.link,
+            distribution_family=self.ModelDesignSpec.family,
+            link_function=self.ModelDesignSpec.link,
             tracker=self._OptimizationTracker
         )
 
@@ -96,8 +96,8 @@ class GeneralModel(BaseModel):
             IV=self.IV,
             DV=self.DV,
             solver_options=self.solver_options,
-            distribution_family=self.ModelFit.family,
-            link_function=self.ModelFit.link
+            distribution_family=self.ModelDesignSpec.family,
+            link_function=self.ModelDesignSpec.link
         )
 
 

@@ -339,7 +339,7 @@ class PoissonModel(BaseModel):
         #   1. Calls ModelMatrix.__init__(formula, data) → builds DV, IV
         #      which internally calls syntax_engine.variable_information()
         #   2. Sets up ModelFit, FitStatistics, CoefResults containers
-        #   3. Builds _model_terms from formulaic ModelSpec
+        #   3. Builds model_terms from formulaic ModelSpec
 
     def fit(self):
         """Fit via IRLS or MLE."""

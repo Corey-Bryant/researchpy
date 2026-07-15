@@ -24,8 +24,8 @@ class LinearModel(BaseModel):
 
         self.__name__ = "Researchpy.LinearModel"
 
-        self.ModelFit.model = self.__name__
-        self.ModelFit.model_display_name = self._get_model_display_name()
+        self.ModelDesignSpec.model = self.__name__
+        self.ModelDesignSpec.model_display_name = self._get_model_display_name()
 
 
         # OLS fit to compute the coefficients (betas) — stored in self.CoefResults.betas
@@ -165,7 +165,7 @@ class LinearModel(BaseModel):
 
 
     #--------------------------------------------------------------------------------------#
-    #                  Shared Methods for dictionaries for self.ModelFit                   #
+    #                  Shared Methods for dictionaries for self.ModelDesignSpec                   #
     #--------------------------------------------------------------------------------------#
     def _get_fit_statistics(self, table_decimals: object = None, *args: object) -> dict[str, list[str]]:
 
@@ -334,7 +334,7 @@ class LinearModel(BaseModel):
 
 
         self.ModelResults = ModelResults(
-                model_name= self.ModelFit.model_display_name,
+                model_name= self.ModelDesignSpec.model_display_name,
                 fit_statistics= fit_statistics,
                 model_table= model_table,
                 coefficients= coefficients,

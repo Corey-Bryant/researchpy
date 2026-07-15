@@ -286,7 +286,7 @@ class CoreModel():
                                     coef_transform=None):
         """Build a prettified coefficient table as a dictionary.
 
-        Uses ``self._model_terms`` for structural info (term names, factor
+        Uses ``self.model_terms`` for structural info (term names, factor
         flags, reference categories, cleaned column names) and
         ``self.CoefResults`` for the raw statistics.  ``CoefResults.term``
         remains the original Patsy column names; cleaned names are sourced

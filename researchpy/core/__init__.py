@@ -12,8 +12,8 @@ Usage:
 """
 
 from .data_utils import as_array, validate_array
-from researchpy.core.matrix_design import DesignMatrices, DesignMatrix, ModelMatrix
-from researchpy.core.model import BaseModel
+from researchpy.core.matrix_design import DesignMatrices, DesignMatrix, ModelMatrix, ModelDesignSpec, MatrixContainer
+from researchpy.core.model import BaseModel, EngineModel
 from .syntax_engine import SyntaxSpec, TermSpec, resolve
 from .matrix_engine import build_indicator_matrix, grouped_statistic, grouped_statistic_pivot
 
@@ -25,6 +25,9 @@ __all__ = [
     'DesignMatrices',
     'DesignMatrix',
     'ModelMatrix',
+    'ModelDesignSpec',
+    'MatrixContainer',
+    'EngineModel',
     'BaseModel',
     'SyntaxSpec',
     'TermSpec',

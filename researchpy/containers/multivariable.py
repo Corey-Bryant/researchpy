@@ -35,6 +35,8 @@ import numpy as np
 import pandas as pd
 import re
 
+import formulaic
+from itertools import product
 
 
 
@@ -527,6 +529,7 @@ class Term(CoreDataclass):
     >>> t.is_factor        # [True, False]
     """
 
+    _term: Any
     term: str
     name: Optional[str] = None
     is_interaction: Optional[Union[bool, list]] = None
@@ -535,6 +538,8 @@ class Term(CoreDataclass):
     columns_cleaned: Optional[list] = field(default_factory=list)
     levels: Optional[Union[list, None]] = None
     reference: Optional[Union[str, list, None]] = None
+    #term_map: Optional[dict] = field(default_factory=dict)
+    #term_column_map: Optional[dict] = field(default_factory=dict)
 
     def __post_init__(self):
         self._parts = self.term.split(":")
@@ -544,6 +549,7 @@ class Term(CoreDataclass):
         # If columns were provided but not yet cleaned, clean them
         if self.columns and not self.columns_cleaned:
             self.columns_cleaned = [self._clean_column(c) for c in self.columns]
+
 
     # ------------------------------------------------------------------ #
     #  Resolve helpers                                                     #
@@ -607,6 +613,79 @@ class Term(CoreDataclass):
         return ":".join(cleaned)
 
 
+    def _include_formulaic_reference_column(self):
+        return [f"{self.term}[T.{lvl}]" for lvl in self.levels]
+
+    def _reference_as_formulaic_column(self):
+        return f"{self.term}[T.{self.reference}]"
+
+
+    # ---
+    # Map helpers
+    # ---
+    def _term_map(self) -> dict:
+        return {self.term: self.name}
+
+    def _column_map(self) -> dict:
+        """
+        Original Formulaic/Patsy column name → cleaned column name.
+        Example: ``{"C(drug, Treatment(2))[T.3]": "3", "disease": "disease"}``
+
+        Note: These are the names of the columns in the design matrix, while the term names are the names of the model_terms in the model formula.
+        """
+        mapping = {}
+        for col in self.columns:
+            mapping[col] = self._clean_column(col)
+        return mapping
+
+    def _term_level_map(self, pretty_format=True, include_base=True) -> dict:
+
+        term_as = "term"
+        levels_as = "columns"
+        if pretty_format:
+            term_as = "name"
+            if include_base:
+                levels_as = "levels"
+            else:
+                levels_as = "columns_cleaned"
+
+        mapping = {}
+        if str(self.term) == 1 or str(self.term.lower()) == "intercept":
+            mapping[getattr(self, term_as)] = getattr(self, "columns")
+
+        elif self.is_interaction:
+            if not include_base:
+                mapping[getattr(self, term_as)] = getattr(self, levels_as)
+            else:
+                interaction_terms_levels = []
+                for ix, sub_term in enumerate(self.term.split(":")):
+                    if self.is_factor[ix]:
+                        all_levels = []
+                        if include_base and not pretty_format:
+                            all_levels = [f"{sub_term}[T.{lvl}]" for lvl in self.levels[ix]]
+                            interaction_terms_levels.append(all_levels)
+                        else:
+                            interaction_terms_levels.append(self.levels[ix])
+                    else:
+                        interaction_terms_levels.append([sub_term])
+
+                full_level_combinations = list(product(*interaction_terms_levels))
+                full_level_combinations = [":".join(level) for level in full_level_combinations]
+                mapping[getattr(self, term_as)] = full_level_combinations
+
+        else:
+            if self.is_factor:
+                if include_base and not pretty_format:
+                    mapping[getattr(self, term_as)] = self._include_formulaic_reference_column()
+                else:
+                    mapping[getattr(self, term_as)] = getattr(self, levels_as)
+            else:
+                mapping[getattr(self, term_as)] = getattr(self, levels_as)
+
+        return mapping
+
+
+
 @dataclass
 class ModelTerms(CoreDataclass):
     """
@@ -644,8 +723,10 @@ class ModelTerms(CoreDataclass):
         mt[1].is_interaction  # True
     """
 
+    #model_terms: dict = field(default_factory=dict)   # dict[str, Term]
     terms: list = field(default_factory=list)   # list[Term]
-    dv: Optional[list] = None                   # list[str] — dependent variable names
+    #dv: Optional[list] = None                   # list[str] — dependent variable names
+
 
     def __post_init__(self):
         self.__name__ = "Researchpy.ModelTerms"
@@ -697,8 +778,6 @@ class ModelTerms(CoreDataclass):
         >>> mt[1].is_factor
         [True, True]
         """
-        import formulaic
-
         if "~" not in formula:
             raise ValueError(
                 f"Formula must contain '~' separating dependent and independent "
@@ -724,14 +803,14 @@ class ModelTerms(CoreDataclass):
             # Skip intercept (factor is "1") unless requested
             if factors_strs == ["1"]:
                 if include_intercept:
-                    terms.append(Term(term="Intercept"))
+                    terms.append(Term(_term=1, term="Intercept"))
                 continue
 
             # Build the term string: "C(x):C(k)" or "z"
             term_str = ":".join(factors_strs)
 
             # Term.__post_init__ handles: name, is_interaction, is_factor
-            term_obj = Term(term=term_str)
+            term_obj = Term(_term=term_str, term=term_str)
             terms.append(term_obj)
 
         return cls(terms=terms, dv=dv_names)
@@ -773,13 +852,13 @@ class ModelTerms(CoreDataclass):
             t_columns = list(encoded_term.columns)
 
             # Skip intercept — represented as term "1" with column "Intercept"
-            if term_str == "1":
-                term_obj = Term(term="Intercept", columns=t_columns)
+            if term_str == "1" or term_str == "Intercept":
+                term_obj = Term(_term=encoded_term.term, term="Intercept", columns=t_columns)
                 terms.append(term_obj)
                 continue
 
             # Build the Term (columns_cleaned is computed in __post_init__)
-            term_obj = Term(term=term_str, columns=t_columns)
+            term_obj = Term(_term=encoded_term.term, term=term_str, columns=t_columns)
 
             # Determine levels and reference for factor terms
             # Get sub-parts of the term (for interactions like "C(group):C(drug)")
@@ -859,18 +938,34 @@ class ModelTerms(CoreDataclass):
     # ------------------------------------------------------------------ #
     @property
     def term_map(self) -> dict:
-        """Original Patsy term name → cleaned term name.
-
+        """
+        Original Patsy term name → cleaned term name.
         Example: ``{"C(drug, Treatment(2))": "drug", "disease": "disease"}``
+
+        Note: These are the names of the terms in the model formula, while the column names are the names of the columns in the design matrix.
         """
         return {t.term: t.name for t in self.terms}
+        #return {t._term_map() for t in self.terms}
 
+    @property
+    def columns(self) -> list:
+        """
+        List of all column names in the design matrix, in order.
+        Example: ``["Intercept", "C(drug, Treatment(2))[T.3]", "C(drug, Treatment(2))[T.3]:disease"]``
+
+        """
+        cols = []
+        for t in self.model_terms.values():
+            cols.extend(t.columns)
+        return cols
 
     @property
     def column_map(self) -> dict:
-        """Original Patsy column name → cleaned column name.
-
+        """
+        Original Formulaic/Patsy column name → cleaned column name.
         Example: ``{"C(drug, Treatment(2))[T.3]": "3", "disease": "disease"}``
+
+        Note: These are the names of the columns in the design matrix, while the term names are the names of the model_terms in the model formula.
         """
         mapping = {}
         for t in self.terms:
@@ -878,29 +973,132 @@ class ModelTerms(CoreDataclass):
                 mapping[orig] = clean
         return mapping
 
+
+    def term_level_map(self, pretty_format=True, include_base=True) -> dict:
+        term_as = "term"
+        levels_as = "columns"
+        if pretty_format:
+            term_as = "name"
+            if include_base:
+                levels_as = "levels"
+            else:
+                levels_as = "columns_cleaned"
+
+        mapping = {}
+        for t in self.terms:
+            if str(t.term) == "1" or str(t.term.lower()) == "intercept":
+                mapping[getattr(t, term_as)] = getattr(t, "columns")
+
+            elif t.is_interaction:
+                interaction_terms_levels = []
+
+                for sub_term in t.term.split(":"):
+                    if self[sub_term].is_factor:
+                        if not pretty_format and include_base:
+                            sub_term_reference = self[sub_term]._reference_as_formulaic_column()
+                            interaction_terms_levels.append([sub_term_reference] + getattr(self[sub_term], levels_as))
+
+                        else:
+                            interaction_terms_levels.append(getattr(self[sub_term], levels_as))
+
+                    else:
+                        interaction_terms_levels.append([sub_term])
+
+                full_level_combinations = list(product(*interaction_terms_levels))
+                full_level_combinations = [":".join(level) for level in full_level_combinations]
+                mapping[getattr(t, term_as)] = full_level_combinations
+
+            else:
+                if t.is_factor:
+                    if include_base and not pretty_format:
+                        mapping[getattr(t, term_as)] = [t._reference_as_formulaic_column()] + getattr(t, levels_as)
+                    else:
+                        mapping[getattr(t, term_as)] = getattr(t, levels_as)
+                else:
+                    mapping[getattr(t, term_as)] = getattr(t, levels_as)
+
+        return mapping
+
+
+    # --------
+    # Cleaning helpers
+    # --------
+    def as_formulaic_column(term):
+        return f"{term.term}[T.{term.reference}]"
+
+    @staticmethod
+    def clean_term(term) -> str:
+        """Clean the Patsy term name.
+
+        ``"C(drug, Treatment(2))"``  →  ``"drug"``
+        ``"C(drug):disease"``        →  ``"drug:disease"``
+        """
+        factor_pattern = re.compile(r'(?<=C\()(.*?)(?=,|\))')
+        cleaned_factors = [
+            ''.join(re.findall(factor_pattern, f)) if "C(" in f else f
+            for f in term.split(":")
+        ]
+        return ":".join(cleaned_factors)
+
+
+    @staticmethod
+    def clean_column(column: str) -> str:
+        """Clean a single Patsy column name.
+
+        Extracts the level value from bracket notation and strips ``C(…)``
+        wrappers.
+
+        ``"C(drug, Treatment(2))[T.3]"``              →  ``"3"``
+        ``"C(drug, Treatment(2))[T.1]:disease"``       →  ``"1:disease"``
+        ``"disease"``                                  →  ``"disease"``
+        ``"Intercept"``                                →  ``"Intercept"``
+        """
+        level_pattern = re.compile(r'(?<=\[..)(.*?)(?=\])')
+
+        parts = column.split(":")
+        cleaned = []
+        for part in parts:
+            if "C(" in part:
+                match = re.findall(level_pattern, part)
+                cleaned.append(match[0] if match else part)
+            else:
+                cleaned.append(part)
+        return ":".join(cleaned)
+
+
+
     # ------------------------------------------------------------------ #
     #  Container protocol                                                  #
     # ------------------------------------------------------------------ #
     def __getitem__(self, key):
-        """Look up a Term by integer index, original term name, or cleaned name."""
+        """
+        Look up a Term by integer index, original term name, or cleaned name.
+
+        """
         if isinstance(key, int):
             return self.terms[key]
+
         for t in self.terms:
             if t.term == key or t.name == key:
                 return t
-        raise KeyError(f"Term '{key}' not found")
 
-    def __iter__(self):
-        return iter(self.terms)
+        raise KeyError(f"Term '{key}' not found")
 
     def __len__(self):
         return len(self.terms)
 
-    def __repr__(self):
+    def to_list(self) -> list:
+        return [t.term for t in self.model_terms.values()]
+
+    def info(self):
         lines = [f"ModelTerms({len(self.terms)} terms)"]
         for t in self.terms:
             lines.append(f"  {t.term!r} → {t.name!r}  "
                          f"(factor={t.is_factor}, intx={t.is_interaction}, "
-                         f"cols={len(t.columns)})")
+                         f"cols={len(t.columns)})"
+                         )
         return "\n".join(lines)
+
+    def __repr__(self):
+        return self.info()
 

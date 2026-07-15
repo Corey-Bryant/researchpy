@@ -78,8 +78,8 @@ class Regress(LinearModel):
         super().__init__(formula_like, data, conf_level=conf_level, table_decimals=table_decimals)
 
         self.__name__ = "Researchpy.Regress"
-        self.ModelFit.model = self.__name__
-        self.ModelFit.model_display_name = self._get_model_display_name()
+        self.ModelDesignSpec.model = self.__name__
+        self.ModelDesignSpec.model_display_name = self._get_model_display_name()
 
         # Build ModelResults (results() sets self.ModelResults internally)
         self.results(return_type=return_type, na_rep=na_rep, pretty_format=pretty_format, table_decimals=table_decimals)
@@ -157,7 +157,7 @@ class Regress(LinearModel):
         if model_summary_df is None:
             return [self._get_model_display_name()]
 
-        model_display = self.ModelFit.model_display_name
+        model_display = self.ModelDesignSpec.model_display_name
 
         table = self.ModelResults.model_table.copy()
 
