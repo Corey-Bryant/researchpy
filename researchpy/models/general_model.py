@@ -2,11 +2,14 @@ import numpy as np
 
 from researchpy.core.model import BaseModel
 from researchpy.containers import SolverOptions, ModelResults
+from researchpy.optimization import (
+    neg_log_likelihood, gradient_neg_log_likelihood,
+    scipy_minimize, newton_raphson, OptimizationTracker
+)
+from researchpy.models.postestimation import (
+    LikelihoodRatioTest, predict
+)
 
-from researchpy.models.objective_functions.likelihood import neg_log_likelihood, gradient_neg_log_likelihood
-from researchpy.models.optimize.iterative_algorithms import scipy_minimize, newton_raphson
-from researchpy.models.postestimation import LikelihoodRatioTest
-from researchpy.models.postestimation.predict import predict
 
 
 class GeneralModel(BaseModel):
@@ -16,35 +19,43 @@ class GeneralModel(BaseModel):
 
     """
 
-    def __init__(self, formula_like, data=None, conf_level=0.95,
+    def __init__(self, formula, data=None, conf_level=0.95,
                  family="gaussian", link="normal",
                  solver_options=None, table_decimals=None):
 
         self.__name__ = "Researchpy.GeneralModel"
         if data is None: data = {}
 
-        # Build SolverOptions: start with GeneralModel defaults, then overlay user input.
-        base_defaults = SolverOptions(
-            method="mle",
-            algorithm="newton-raphson",
-            obj_function="log-likelihood",
-            tol=1e-7,
-            max_iter=300,
-            display=True
+        #-------------------------------------------------#
+        # -- Build a SolverOptions dataclass instance. -- #
+        #-------------------------------------------------#
+        # Subclasses (LinearModel, GeneralModel) should resolve their own defaults and pass a fully-formed SolverOptions instance.
+        # If None or dict arrives here, we fall back to the SolverOptions dataclass defaults.
+        self.SolverOptions = SolverOptions(
+                estimation_method="mle",
+                algorithm="newton-raphson",
+                obj_function="log-likelihood",
+                tol=1e-7, tolerance=1e-4,
+                logtolerance=0,
+                max_iter=300,
+                display=True,
+                regularization=None,
+                alpha=0.0
         )
+        if isinstance(solver_options, SolverOptions):
+            self.SolverOptions = self.SolverOptions.with_overrides(solver_options.to_dict())
+        elif isinstance(solver_options, dict):
+            self.SolverOptions = self.SolverOptions.with_overrides(solver_options)
 
-        if solver_options is None:
-            resolved_solver_options = base_defaults
-        elif isinstance(solver_options, SolverOptions):
-            resolved_solver_options = solver_options
-        else:
-            # User passed a dict — override base defaults with user values
-            resolved_solver_options = base_defaults.with_overrides(solver_options)
+        #-------------------------------------------------------------------#
+        # -- Initialize an optimization tracker instance for this model. -- #
+        #-------------------------------------------------------------------#
+        # This tracker can be used by optimization algorithms to
+        # store and monitor the optimization process.
+        self._OptimizationTracker = OptimizationTracker()
 
-
-        super().__init__(formula_like=formula_like, data=data, conf_level=conf_level,
-                         family=family, link=link,
-                         solver_options=resolved_solver_options, table_decimals=table_decimals)
+        super().__init__(formula=formula, data=data, conf_level=conf_level, family=family, link=link,
+                         solver_options=self.SolverOptions, table_decimals=table_decimals)
 
 
     def __initialize_betas(self, initial_betas=None, initial_betas_method=None):
@@ -82,7 +93,7 @@ class GeneralModel(BaseModel):
             params=params,
             IV=self.IV,
             DV=self.DV,
-            solver_options=self.solver_options,
+            solver_options=self.SolverOptions,
             distribution_family=self.ModelDesignSpec.family,
             link_function=self.ModelDesignSpec.link,
             tracker=self._OptimizationTracker
@@ -95,7 +106,7 @@ class GeneralModel(BaseModel):
             params=params,
             IV=self.IV,
             DV=self.DV,
-            solver_options=self.solver_options,
+            solver_options=self.SolverOptions,
             distribution_family=self.ModelDesignSpec.family,
             link_function=self.ModelDesignSpec.link
         )
@@ -110,16 +121,16 @@ class GeneralModel(BaseModel):
 
         # Try scipy.optimize first
         try:
-            if self.solver_options.display:
-                print(f"Starting optimization with {self.solver_options.algorithm}...\n")
+            if self.SolverOptions.display:
+                print(f"Starting optimization with {self.SolverOptions.algorithm}...\n")
 
             # Fit the full model
             result = scipy_minimize(
                 fun=self._neg_log_likelihood,
                 x0=self.CoefResults.betas.flatten(),
                 jac=self._gradient_neg_log_likelihood,
-                method=self.solver_options.algorithm,
-                options=self.solver_options.to_scipy_options(),
+                method=self.SolverOptions.algorithm,
+                options=self.SolverOptions.to_scipy_options(),
                 callback=None
             )
 
@@ -132,16 +143,16 @@ class GeneralModel(BaseModel):
                 # Perform Likelihood Ratio Test (full model vs null)
                 self._lr_test = LikelihoodRatioTest(self, store_null=True)
 
-                if self.solver_options.display:
+                if self.SolverOptions.display:
                     print(f"")
                     print(f"")
             else:
-                if self.solver_options.display:
+                if self.SolverOptions.display:
                     print(f"Warning: scipy optimization did not converge ({result.message})")
                     print("Falling back to Newton-Raphson...")
 
         except Exception as e:
-            if self.solver_options.display:
+            if self.SolverOptions.display:
                 print(f"scipy.optimize failed: {e}")
                 print("Falling back to Newton-Raphson...")
 
@@ -151,9 +162,9 @@ class GeneralModel(BaseModel):
                 IV=self.IV,
                 DV=self.DV,
                 betas=self.CoefResults.betas,
-                tol=self.solver_options.tol,
-                max_iter=self.solver_options.max_iter,
-                display=self.solver_options.display
+                tol=self.SolverOptions.tol,
+                max_iter=self.SolverOptions.max_iter,
+                display=self.SolverOptions.display
             )
             self.CoefResults.betas = betas
 

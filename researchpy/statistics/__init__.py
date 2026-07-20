@@ -24,6 +24,7 @@ from .intervals import confidence_interval
 from .shape import skewness, kurtosis
 from .categorical import n_unique, value_counts, proportions, cumulative_proportions, tabulate
 from ._dispatcher import estable
+from ._estimation_interval import _confidence_interval
 from .describe import describe
 
 
@@ -49,6 +50,7 @@ __all__ = [
     "coefficient_of_variation",
     # Intervals
     "confidence_interval",
+    "_confidence_interval",
     # Shape
     "skewness",
     "kurtosis",

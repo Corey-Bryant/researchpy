@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "researchpy"
-version = "0.3.8"
+version = "0.3.7.2"
 authors = [ { name="Corey Bryant", email="ResearchPy.Official@proton.me" }]
 maintainers = [ {name="Corey Bryant", email="ResearchPy.Official@proton.me" }]
 description = "ResearchPy is a Python library for statistical analysis, designed to generate well-structured pandas DataFrame outputs for commonly used descriptive and inferential procedures. It emphasizes readable, publication-oriented results that support reproducible analysis workflows."

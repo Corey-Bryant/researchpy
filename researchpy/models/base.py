@@ -5,7 +5,7 @@ from researchpy.utility import *
 from researchpy.models.postestimation.predict import predict
 from researchpy.containers import ModelFit, FitStatistics, ModelEffects, CoefResults, ModelTerms, SolverOptions
 
-from researchpy.models.optimize.trackers import OptimizationTracker
+from optimization.trackers import OptimizationTracker
 
 
 
@@ -113,7 +113,7 @@ class CoreModel():
             formula = formula_like,
             family = family,
             link = link,
-            solver_method = self.solver_options.method,
+            solver_method = self.solver_options.estimation_method,
             ci_level = conf_level,
             dv_term_names = list(mm.lhs.columns),
             iv_term_names = list(self._model_terms.column_map.keys())

@@ -86,7 +86,7 @@ class SolverOptions(CoreDataclass):
 
     Parameters
     ----------
-    method : str
+    estimation_method : str
         High-level estimation method. One of ``"ols"``, ``"mle"``, ``"irls"``.
         Default is ``"ols"``.
     algorithm : str or None
@@ -98,6 +98,10 @@ class SolverOptions(CoreDataclass):
         Default is ``"numeric"``.
     tol : float
         Convergence tolerance for the optimizer. Default is ``1e-7``.
+    tolerance : float
+        Convergence tolerance for the coefficient vector. Default is ``1e-6``.
+    logtolerance : float
+        Convergence tolerance for the log likelihood. Default is ``1e-7``.
     max_iter : int
         Maximum number of iterations allowed. Default is ``300``.
     display : bool
@@ -113,7 +117,7 @@ class SolverOptions(CoreDataclass):
     Examples
     --------
     >>> from researchpy.containers.multivariable import SolverOptions
-    >>> opts = SolverOptions(method="mle", algorithm="BFGS", max_iter=1000)
+    >>> opts = SolverOptions(estimation_method="mle", algorithm="BFGS", max_iter=1000)
     >>> opts.algorithm
     'BFGS'
 
@@ -121,20 +125,28 @@ class SolverOptions(CoreDataclass):
     constructor will unpack it into a ``SolverOptions`` instance:
 
     >>> model = LogisticRegression("y ~ x", data=df,
-    ...                            solver_options={"algorithm": "BFGS", "max_iter": 500})
+    ...                            SolverOptions={"algorithm": "BFGS", "max_iter": 500})
     """
 
-    method: str = "ols"
-    algorithm: Optional[str] = None
-    obj_function: str = "numeric"
+    estimation_method: str
+    obj_function: str
+
+    # Irrelevant for OLS
+    algorithm: Optional[str] = None       # Defaults to "newton-raphson" if estimation_method not
     tol: float = 1e-7
+    tolerance: float = 1e-6         # The default in Stata 19, unless estimators programmed with ml then == 1e-4
+    logtolerance: float = 1e-7      # The default in Stata 19, unless estimators programmed with ml then == 0
     max_iter: int = 300
-    display: bool = True
     regularization: Optional[str] = None
     alpha: float = 0.0
+    display: bool = True
 
     def __post_init__(self):
         self.__name__ = "Researchpy.SolverOptions"
+        if self.estimation_method not in ['ols', 'ordinary_least_squares', 'numeric', 'analytic']:
+            if self.algorithm is None: self.algorithm = 'newton-raphson'
+            if self.obj_function is None: self.obj_function = 'log-likelihood'
+
 
     @classmethod
     def from_dict(cls, d: dict) -> "SolverOptions":

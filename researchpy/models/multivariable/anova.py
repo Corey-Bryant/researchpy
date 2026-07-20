@@ -32,7 +32,7 @@ class Anova(LinearModel):
 
     Parameters
     ----------
-    formula_like : str
+    formula : str
         A string representing a valid Patsy formula (e.g., "y ~ C(factor1) + C(factor2)").
         See https://patsy.readthedocs.io/en/latest/ for formula syntax.
     data : dict or DataFrame, optional
@@ -80,7 +80,7 @@ class Anova(LinearModel):
     ...     'y': [1, 2, 3, 4, 5, 6],
     ...     'group': ['A', 'A', 'B', 'B', 'C', 'C']
     ... })
-    >>> model = rp.Anova("y ~ C(group)", data=df)
+    >>> model = rp.Anova("y ~ C(group)",data=df)
     >>> model.results()
 
     See Also
@@ -315,7 +315,7 @@ class Anova(LinearModel):
     #                        Constructor                                  #
     # ------------------------------------------------------------------ #
 
-    def __init__(self, formula_like, data=None, sum_of_squares=3, conf_level=0.95,
+    def __init__(self, formula, data=None, sum_of_squares=3, conf_level=0.95,
                  display_summary=True, table_decimals=None):
 
         if data is None:
@@ -324,7 +324,7 @@ class Anova(LinearModel):
         self._test_stat_name = "t"
         self._CI_LEVEL = conf_level
 
-        super().__init__(formula_like, data, conf_level=conf_level, table_decimals=table_decimals)
+        super().__init__(formula=formula, data=data, conf_level=conf_level, table_decimals=table_decimals)
 
         self.__name__ = "Researchpy.ANOVA"
         self.ModelDesignSpec.model_type = self.__name__

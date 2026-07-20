@@ -5,9 +5,10 @@ from researchpy.core.matrix_design import DesignMatrix, ModelDesignSpec
 
 from researchpy.utility import *
 from researchpy.models.postestimation.predict import predict
-from researchpy.containers import ModelFit, FitStatistics, ModelEffects, CoefResults, ModelTerms, SolverOptions
+from researchpy.containers import FitStatistics, ModelEffects, CoefResults, SolverOptions
 
-from researchpy.models.optimize.trackers import OptimizationTracker
+from researchpy.optimization.trackers import OptimizationTracker
+from researchpy.statistics import _confidence_interval
 
 
 
@@ -25,15 +26,7 @@ class BaseModel(DesignMatrix):
 
     """
 
-
-    @property
-    def obj_function(self):
-        return self._obj_function
-    @obj_function.setter
-    def obj_function(self, obj_function):
-        self._obj_function = obj_function
-
-    def __init__(self, formula_like, data={}, conf_level=0.95,
+    def __init__(self, formula, data={}, conf_level=0.95,
                  family="gaussian", link="normal",
                  solver_options=None, table_decimals=None,
                  include_intercept: bool = True, ensure_full_rank: bool = True, **kwargs, ):
@@ -41,25 +34,21 @@ class BaseModel(DesignMatrix):
         self.__name__ = "Researchpy.BaseModel"
         self._beta_type = "coef"
 
-        super().__init__(formula_like, data, output="numpy", include_intercept=include_intercept, ensure_full_rank=ensure_full_rank)
+        if not hasattr(self, "SolverOptions"):
+            raise NotImplementedError(
+                    f"{type(self).__name__} must have a self.SolverOptions attribute."
+            )
 
 
-        # Build a SolverOptions dataclass instance.
-        # Subclasses (LinearModel, GeneralModel) should resolve their own defaults
-        # and pass a fully-formed SolverOptions instance. If None or dict arrives
-        # here, we fall back to the SolverOptions dataclass defaults.
-        if isinstance(solver_options, SolverOptions):
-            self.solver_options = solver_options
-        elif isinstance(solver_options, dict):
-            self.solver_options = SolverOptions.from_dict(solver_options)
-        else:
-            self.solver_options = SolverOptions()
-
-        self.obj_function = self.solver_options.obj_function
-
-        # Initialize an optimization tracker instance for this model. This tracker can be used by optimization
-        # algorithms to store and monitor the optimization process.
-        self._OptimizationTracker = OptimizationTracker()
+        super().__init__(formula, data, output="numpy", include_intercept=include_intercept, ensure_full_rank=ensure_full_rank)
+        """
+        
+        Parsing the formula and assigning formulaic.model_spec.ModelSpec, and researchpy.ModelTerms instances to self:
+        - self.DV: ModelSpec for the dependent variable (left-hand side of the formula)
+        - self.IV: ModelSpec for the intercept (right-hand side of the formula)
+        - self.model_terms for researchpy.ModelTerms instances
+        
+        """
 
         # Model design information
         if not hasattr(self, "_test_stat_name"):
@@ -70,11 +59,12 @@ class BaseModel(DesignMatrix):
 
         # ModelFit dataclass stores the model design information and fit parameters
         self.ModelDesignSpec = ModelDesignSpec(
-            formula = self.formula,
+            formula = formula,
             model_terms= self.model_terms,
             family = family,
             link = link,
-            solver_method = self.solver_options.method,
+            solver_options=self.SolverOptions,
+            solver_method = self.SolverOptions.estimation_method,
             ci_level = conf_level,
             dv_term_names = self.model_terms['dv'][0].columns,
             iv_term_names = list(self.model_terms['iv'].column_map.keys())
@@ -200,25 +190,51 @@ class BaseModel(DesignMatrix):
             return betas
 
 
-    def __compute_confidence_intervals(self):
+    def __fit_model(self, method="standard", **kwargs):
+
+
+
+        raise NotImplementedError(
+            f"{type(self).__name__} must override __fit_model()."
+        )
+
+
+
+    def _confidence_interval(self, confidence=0.95, distribution_name="normal",
+                             distribution_object=None, dof=None):
+        """
+        Estimate the confidence interval for a given point estimate and scale error estimate.
+
+        Parameters
+        ----------
+        confidence : float, optional
+            The desired confidence level (between 0 and 1). Default is 0.95 for a 95% confidence interval.
+        distribution_name : str, optional
+            The name of the distribution to use for the confidence interval calculation. Default is "norm" for the normal distribution.
+        distribution_object : scipy.stats.rv_continuous or scipy.stats.rv_discrete, optional
+            A specific scipy.stats distribution object to use instead of the default or named distribution.
+        dof : int, optional
+            Degrees of freedom, required if using a t-distribution.
+        decimals : int, optional
+            Number of decimal places to round the results to. If None, no rounding is applied.
+
+        Returns
+        -------
+        list
+            A list containing the lower and upper bounds of the confidence interval.
+        """
         conf_int_lower = []
         conf_int_upper = []
 
         for beta, se in zip(self.CoefResults.betas, self.CoefResults.std_error):
+            ci_bounds = _confidence_interval(beta, se, confidence,
+                                             distribution_name=distribution_name,
+                                             distribution_object=distribution_object,
+                                             dof=dof)
 
-            try:
-                lower, upper = scipy.stats.norm.interval(self.ModelDesignSpec.ci_level, loc=beta, scale=se)
-                conf_int_lower.append(float(lower))
-                conf_int_upper.append(float(upper))
+            conf_int_lower.append(ci_bounds.statistics["lower"])
+            conf_int_upper.append(ci_bounds.statistics["upper"])
 
-            except TypeError:
-                try:
-                    conf_int_lower.append(lower.item())
-                    conf_int_upper.append(upper.item())
-
-                except:
-                    conf_int_lower.append(np.nan)
-                    conf_int_upper.append(np.nan)
 
         self.CoefResults.conf_int_lower = np.array(conf_int_lower)
         self.CoefResults.conf_int_upper = np.array(conf_int_upper)

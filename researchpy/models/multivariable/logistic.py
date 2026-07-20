@@ -21,7 +21,7 @@ class LogisticRegression(GeneralModel):
 
     Parameters
     ----------
-    formula_like : str
+    formula : str
         A string representing a valid Patsy formula (e.g., "outcome ~ predictor1 + predictor2").
     data : dict or DataFrame, optional
         Data containing the variables referenced in the formula.
@@ -43,7 +43,7 @@ class LogisticRegression(GeneralModel):
     Examples
     --------
     >>> import researchpy as rp
-    >>> model = rp.LogisticRegression("outcome ~ age + treatment", data=df)
+    >>> model = rp.LogisticRegression("outcome ~ age + treatment",data=df)
     >>> model.results()
 
     See Also
@@ -51,7 +51,7 @@ class LogisticRegression(GeneralModel):
     Logistic : Alias for LogisticRegression
     """
 
-    def __init__(self, formula_like, data=None, conf_level=0.95,
+    def __init__(self, formula, data=None, conf_level=0.95,
                  report_as="or", display_summary=True,
                  solver_options=None, table_decimals=None,
                  initial_betas=None, initial_betas_method="ols"):
@@ -59,29 +59,31 @@ class LogisticRegression(GeneralModel):
         if data is None: data = {}
         self._test_stat_name = "z"
 
-        # Build SolverOptions: start with LogisticRegression-specific defaults, then overlay user input.
-        base_defaults = SolverOptions(
-            method="mle",
-            algorithm="BFGS",
-            obj_function="log-likelihood",
-            tol=1e-7,
-            max_iter=1000,
-            display=True,
-            regularization=None,
-            alpha=0.0
+        #-------------------------------------------------#
+        # -- Build a SolverOptions dataclass instance. -- #
+        #-------------------------------------------------#
+        # Subclasses (LinearModel, GeneralModel) should resolve their own defaults and pass a fully-formed SolverOptions instance.
+        # If None or dict arrives here, we fall back to the SolverOptions dataclass defaults.
+        self.SolverOptions = SolverOptions(
+                estimation_method="mle",
+                algorithm="newton-raphson",
+                obj_function="log-likelihood",
+                tol=1e-7, tolerance=1e-4,
+                logtolerance=0,
+                max_iter=300,
+                display=True,
+                regularization=None,
+                alpha=0.0
         )
-        if solver_options is None:
-            resolved_solver_options = base_defaults
-        elif isinstance(solver_options, SolverOptions):
-            resolved_solver_options = solver_options
-        else:
-            # User passed a dict — override base defaults with user values
-            resolved_solver_options = base_defaults.with_overrides(solver_options)
+        if isinstance(solver_options, SolverOptions):
+            self.SolverOptions = self.SolverOptions.with_overrides(solver_options.to_dict())
+        elif isinstance(solver_options, dict):
+            self.SolverOptions = self.SolverOptions.with_overrides(solver_options)
 
 
-        super().__init__(formula_like, data, conf_level=conf_level,
-                         family="binomial", link="logit",
-                         solver_options=resolved_solver_options, table_decimals=table_decimals)
+        super().__init__(formula, data, conf_level=conf_level, family="binomial", link="logit",
+                         solver_options=self.SolverOptions, table_decimals=table_decimals
+                         )
 
         self.__name__ = "Researchpy.LogisticRegression"
 
@@ -167,7 +169,7 @@ class LogisticRegression(GeneralModel):
         self.CoefResults.test_pval = 2 * norm.sf(np.abs(self.CoefResults.test_stat))
 
         # Compute confidence intervals
-        self._BaseModel__compute_confidence_intervals()
+        self._confidence_interval()
 
 
 
@@ -233,7 +235,7 @@ class LogisticRegression(GeneralModel):
 
         Examples
         --------
-        >>> model = LogisticRegression("outcome ~ age + treatment", data=df)
+        >>> model = LogisticRegression("outcome ~ age + treatment",data=df)
         >>> table, stats = model.classification_table()
         >>> print(table)
         >>> print(stats)

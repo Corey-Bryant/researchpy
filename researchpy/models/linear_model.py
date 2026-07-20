@@ -13,13 +13,18 @@ class LinearModel(BaseModel):
 
     """
 
-    def __init__(self, formula_like, data=None, conf_level=0.95, table_decimals=None):
+    def __init__(self, formula, data=None, conf_level=0.95, table_decimals=None):
 
         self.FactorEffects = FactorEffects()
+        solver_options = SolverOptions(
+                estimation_method="ols",
+                obj_function="ssr",
+                algorithm=None,
+        )
         if data is None:  data = {}
 
-        super().__init__(formula_like=formula_like, data=data, conf_level=conf_level,
-                         family="gaussian", link="normal", solver_options=None,
+        super().__init__(formula=formula, data=data, conf_level=conf_level,
+                         family="gaussian", link="normal", solver_options=solver_options,
                          table_decimals=table_decimals)
 
         self.__name__ = "Researchpy.LinearModel"
@@ -40,6 +45,11 @@ class LinearModel(BaseModel):
         self.__compute_beta_se_and_stats()
 
 
+    def __fit_model(self):
+        ...
+
+
+
     def __compute_beta_se_and_stats(self):
         variance_covariance_beta_matrix = self.__variance_covariance_beta_matrix(method="standard", to_return=True, add_to_self=False)
 
@@ -55,7 +65,8 @@ class LinearModel(BaseModel):
             for t in self.CoefResults.test_stat
         ])
 
-        self._BaseModel__compute_confidence_intervals()
+        self._confidence_interval()
+
 
 
     def __variance_covariance_residual_matrix(self, method="standard", to_return=True, add_to_self=False):

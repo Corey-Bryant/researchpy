@@ -6,14 +6,19 @@ from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 
-from researchpy.containers import CoreDataclass, ModelTerms
+from researchpy.containers import CoreDataclass, ModelTerms, SolverOptions
 
 
 
 class DesignMatrix():
+    """
 
-    def __init__(self, formula:str, data:object ={}, output:str ="numpy",
-                 include_intercept:bool =True, ensure_full_rank:bool =True, **kwargs, ) -> None:
+    This is the core matrix design object for Researchpy and the matrix engine.
+
+    """
+
+    def __init__(self, formula: str, data: object = {}, output: str = "numpy",
+                 include_intercept: bool = True, ensure_full_rank: bool = True, **kwargs: object, ) -> None:
 
         self.__name__ = "Researchpy.DesignMatrix"
 
@@ -27,7 +32,6 @@ class DesignMatrix():
                      ).get_model_matrix(data, output=output, ensure_full_rank=ensure_full_rank, **kwargs)
 
         # Extract what we need
-        self.formula = formula
         self.DV = mm.lhs                                                   # Maintains a formuliac.model_spec.ModelSpec
         self.IV = mm.rhs                                                   # Maintains a formuliac.model_spec.ModelSpec
         self.model_terms = {"dv": ModelTerms.from_model_spec(mm.lhs.model_spec),
@@ -66,6 +70,7 @@ class ModelDesignSpec(CoreDataclass):
     model: Optional[str] = None
     model_display_name: Optional[str] = None
     link: Optional[str] = None
+    solver_options: Optional[SolverOptions] = None
     solver_method: Optional[str] = None
     ci_level: Optional[float] = 0.95
     additional_stats: Optional[dict] = field(default_factory=dict)

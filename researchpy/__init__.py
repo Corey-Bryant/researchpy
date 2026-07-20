@@ -27,4 +27,4 @@ from researchpy.models import CoreModel, GeneralModel
 from researchpy.models.multivariable import Regress, LinearRegression, LM, Anova, ANOVA, LogisticRegression, Logistic
 
 # Statistical summary subpackage
-from .statistics import *
+from researchpy.statistics import *

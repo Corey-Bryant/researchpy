@@ -68,14 +68,14 @@ class Regress(LinearModel):
     Anova : Analysis of Variance (inherits from OLS)
     """
 
-    def __init__(self, formula_like, data=None, conf_level=0.95,
+    def __init__(self, formula, data=None, conf_level=0.95,
                  table_decimals=None,
                  display_summary=True, return_type="Dictionary",
                  na_rep='', pretty_format=True,):
 
         self._test_stat_name = "t"
 
-        super().__init__(formula_like, data, conf_level=conf_level, table_decimals=table_decimals)
+        super().__init__(formula=formula, data=data, conf_level=conf_level, table_decimals=table_decimals)
 
         self.__name__ = "Researchpy.Regress"
         self.ModelDesignSpec.model = self.__name__
