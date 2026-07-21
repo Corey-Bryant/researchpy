@@ -1,41 +1,45 @@
 import numpy as np
 
-from researchpy.core.model import BaseModel
 from researchpy.containers import SolverOptions, ModelResults
-from researchpy.optimization import (
-    neg_log_likelihood, gradient_neg_log_likelihood,
-    scipy_minimize, newton_raphson, OptimizationTracker
-)
+
+from researchpy.models.base import BaseModel
 from researchpy.models.postestimation import (
     LikelihoodRatioTest, predict
 )
+from researchpy.optimize import (
+    OptimizationTracker,
+    _ols_estimation_principal, _mle_estimation_principal,
+    neg_log_likelihood, gradient_neg_log_likelihood,
+    IRLS, newton_raphson,
+)
 
 
 
-class GeneralModel(BaseModel):
+
+class GeneralizedLinearModel(BaseModel):
     """
 
-    This is a subclass of core_model for generalized statistical models such as logistic, poisson, and etc.
+    This is a subclass of BaseModel for generalized statistical models such as logistic, poisson, and etc.
 
     """
 
-    def __init__(self, formula, data=None, conf_level=0.95,
-                 family="gaussian", link="normal",
+    def __init__(self, formula, data=None, conf_level=0.95, family="gaussian", link="identity",
                  solver_options=None, table_decimals=None):
 
-        self.__name__ = "Researchpy.GeneralModel"
+        self.__name__ = "Researchpy.GeneralizedLinearModel"
         if data is None: data = {}
 
         #-------------------------------------------------#
         # -- Build a SolverOptions dataclass instance. -- #
         #-------------------------------------------------#
-        # Subclasses (LinearModel, GeneralModel) should resolve their own defaults and pass a fully-formed SolverOptions instance.
+        # Subclasses (LinearModel, GeneralizedLinearModel) should resolve their own defaults and pass a fully-formed SolverOptions instance.
         # If None or dict arrives here, we fall back to the SolverOptions dataclass defaults.
         self.SolverOptions = SolverOptions(
                 estimation_method="mle",
-                algorithm="newton-raphson",
-                obj_function="log-likelihood",
-                tol=1e-7, tolerance=1e-4,
+                obj_function="ssr",
+                algorithm="IRLS",
+                tol=1e-7,
+                tolerance=1e-4,
                 logtolerance=0,
                 max_iter=300,
                 display=True,
@@ -70,11 +74,12 @@ class GeneralModel(BaseModel):
                 raise ValueError(f"initial_betas must be a numpy array of shape ({self.k}, 1), but got {initial_betas.shape}")
 
         elif initial_betas_method.lower() == "ols":
-            self._BaseModel__ols_fit()
+            #self._BaseModel__ols_fit()
+            self.CoefResults.betas = _ols_estimation_principal(self.IV, self.DV)
 
         # Default initialization based on model type
         else:
-            if self.__name__ in ["researchpy.Logistic", "researchpy.Logit"]:
+            if self.__name__ in ["researchpy.LogisticRegression", "researchpy.Logit"]:
                 """Initialize betas with smarter starting values."""
                 # Start with zeros (better than OLS for binary outcomes)
                 betas = np.ones((self.n, self.k))
@@ -94,8 +99,8 @@ class GeneralModel(BaseModel):
             IV=self.IV,
             DV=self.DV,
             solver_options=self.SolverOptions,
-            distribution_family=self.ModelDesignSpec.family,
-            link_function=self.ModelDesignSpec.link,
+            distribution_family=self.ModelDesignSpec.family.name,
+            link_function=self.ModelDesignSpec.family.link,
             tracker=self._OptimizationTracker
         )
 
@@ -107,70 +112,80 @@ class GeneralModel(BaseModel):
             IV=self.IV,
             DV=self.DV,
             solver_options=self.SolverOptions,
-            distribution_family=self.ModelDesignSpec.family,
-            link_function=self.ModelDesignSpec.link
+            distribution_family=self.ModelDesignSpec.family.name,
+            link_function=self.ModelDesignSpec.family.link
         )
 
 
-    def __fit_model(self):
-        """Fit the model using scipy.optimize with fallback."""
-
+    def fit(self):
         self.logL = []
         self.nfev = -1
         converged = False
 
-        # Try scipy.optimize first
-        try:
-            if self.SolverOptions.display:
-                print(f"Starting optimization with {self.SolverOptions.algorithm}...\n")
 
-            # Fit the full model
-            result = scipy_minimize(
-                fun=self._neg_log_likelihood,
-                x0=self.CoefResults.betas.flatten(),
-                jac=self._gradient_neg_log_likelihood,
-                method=self.SolverOptions.algorithm,
-                options=self.SolverOptions.to_scipy_options(),
-                callback=None
-            )
+        if self.SolverOptions.display:
+            print(f"Starting optimization with {self.SolverOptions.algorithm}...\n")
 
-            if result.success:
-                self.CoefResults.betas = result.x.reshape(-1, 1)
-                self.logL.append(-result.fun)
-                self.nfev = result.nfev
-                converged = True
 
-                # Perform Likelihood Ratio Test (full model vs null)
-                self._lr_test = LikelihoodRatioTest(self, store_null=True)
+        # -- Solving algorithm Iteratively Reweighted Least-squares (IRLS) has to be executed differently than the other algorithms. --#
+        if self.SolverOptions.algorithm.lower() in ['irls', 'iterative reweighted least-squares']:
 
-                if self.SolverOptions.display:
-                    print(f"")
-                    print(f"")
-            else:
-                if self.SolverOptions.display:
-                    print(f"Warning: scipy optimization did not converge ({result.message})")
-                    print("Falling back to Newton-Raphson...")
+            options = self.SolverOptions.to_scipy_options() | {"family": self.ModelDesignSpec.family,
+                                                               "IV": self.IV,
+                                                               "DV": self.DV}
 
-        except Exception as e:
-            if self.SolverOptions.display:
-                print(f"scipy.optimize failed: {e}")
-                print("Falling back to Newton-Raphson...")
+            result = _mle_estimation_principal(lambda p, *a: 0,
+                                               x0=self.CoefResults.betas.flatten(),
+                                               method=IRLS,
+                                               callback=None,
+                                               options=options,
+                                               )
 
-        # Fallback to Newton-Raphson if scipy failed
-        if not converged:
-            betas, self.logL = newton_raphson(
-                IV=self.IV,
-                DV=self.DV,
-                betas=self.CoefResults.betas,
-                tol=self.SolverOptions.tol,
-                max_iter=self.SolverOptions.max_iter,
-                display=self.SolverOptions.display
-            )
-            self.CoefResults.betas = betas
+        elif self.SolverOptions.algorithm.lower() in ['newton-raphson', 'nr']:
+            #success, self.CoefResults.betas, self.logL = newton_raphson(IV=self.IV,
+            #                                                              DV=self.DV,
+            #                                                              betas=self.CoefResults.betas,
+            #                                                              tol=self.SolverOptions.tol,
+            #                                                              max_iter=self.SolverOptions.max_iter,
+            #                                                              display=self.SolverOptions.display,
+            #                                                              )
+            result = newton_raphson(IV=self.IV,
+                                    DV=self.DV,
+                                    betas=self.CoefResults.betas,
+                                    tol=self.SolverOptions.tol,
+                                    max_iter=self.SolverOptions.max_iter,
+                                    display=self.SolverOptions.display,
+                                    )
 
-            # Perform Likelihood Ratio Test for Newton-Raphson path
-            self.nfev = len(self.logL)
+        else:
+            #if self.SolverOptions.algorithm == "newton-raphson": self.SolverOptions.algorithm = 'Newton-CG'
+            result = _mle_estimation_principal(fun=self._neg_log_likelihood,
+                                               x0=self.CoefResults.betas.flatten(),
+                                               jac=self._gradient_neg_log_likelihood,
+                                               method=self.SolverOptions.algorithm,
+                                               callback=None,
+                                               options=self.SolverOptions.to_scipy_options(),
+                                               )
+
+
+        # -- Evaluating if the optimization converged and storing results accordingly. -- #
+        if result.success:
+            self.CoefResults.betas = result.x.reshape(-1, 1)
+            self.logL.append(-result.fun)
+            self.nfev = result.nfev
+            converged = True
+
+            # Perform Likelihood Ratio Test (full model vs null)
             self._lr_test = LikelihoodRatioTest(self, store_null=True)
+
+            if self.SolverOptions.display:
+                print(f"")
+                print(f"")
+
+        else:
+            if self.SolverOptions.display:
+                print(f"Warning: {self.SolverOptions.estimation_method} using {self.SolverOptions.algorithm} did not converge ({result.message})")
+
 
         # ---- Populate FitStatistics dataclass from LR test results ----
         ll_full = self.logL[-1] if self.logL else None
@@ -254,38 +269,6 @@ class GeneralModel(BaseModel):
                 f"{type(self).__name__} must override _get_ModelResults() "
                 "to provide self.ModelResults."
         )
-
-
-    def _get_from_child_bu(self, key: str, **kwargs):
-        """
-        Return LogisticRegression-specific data requested by the parent class.
-
-        Parameters
-        ----------
-        key : str
-            Identifier for the requested data. Supported keys:
-            - ``"default_transform"`` : ``np.exp`` (odds ratios)
-            - ``"test_stat_name"`` : ``"z"``
-            - ``"additional_fit_stats"`` : extra logistic-specific fit stats
-            - ``"report_options"`` : default reporting configuration
-        **kwargs
-            Additional context from the parent.
-
-        Returns
-        -------
-        object
-            The requested value, or ``None`` for unrecognized keys.
-        """
-        if key == "default_transform":
-            return np.exp
-        if key == "test_stat_name":
-            return "z"
-        if key == "additional_fit_stats":
-            return {}
-        if key == "report_options":
-            return {"report_as": "or", "beta_type": "odds ratio"}
-
-        return super()._get_from_child(key, **kwargs)
 
 
     def _get_coefficient_results(self, na_rep='', pretty_format=True, table_decimals=None,
@@ -502,3 +485,6 @@ class GeneralModel(BaseModel):
 
 
 
+
+# Convenience aliases for users who prefer different naming conventions
+GLM = GeneralizedLinearModel

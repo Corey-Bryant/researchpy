@@ -1,14 +1,14 @@
 from scipy.stats import norm
 from scipy.special import expit
 
-from researchpy.models.general_model import GeneralModel
+from researchpy.models.generalized.general_model import GeneralizedLinearModel
 from researchpy.containers import ModelResults, SolverOptions
 from researchpy.utility import *
 
 from researchpy.models.postestimation.predict import predict
 
 
-class LogisticRegression(GeneralModel):
+class LogisticRegression(GeneralizedLinearModel):
     """
     Logistic regression for binary outcomes using Maximum Likelihood Estimation (MLE).
 
@@ -62,13 +62,14 @@ class LogisticRegression(GeneralModel):
         #-------------------------------------------------#
         # -- Build a SolverOptions dataclass instance. -- #
         #-------------------------------------------------#
-        # Subclasses (LinearModel, GeneralModel) should resolve their own defaults and pass a fully-formed SolverOptions instance.
+        # Subclasses (LinearModel, GeneralizedLinearModel) should resolve their own defaults and pass a fully-formed SolverOptions instance.
         # If None or dict arrives here, we fall back to the SolverOptions dataclass defaults.
         self.SolverOptions = SolverOptions(
                 estimation_method="mle",
-                algorithm="newton-raphson",
+                algorithm="IRLS",
                 obj_function="log-likelihood",
-                tol=1e-7, tolerance=1e-4,
+                tol=1e-7,
+                tolerance=1e-4,
                 logtolerance=0,
                 max_iter=300,
                 display=True,
@@ -82,16 +83,16 @@ class LogisticRegression(GeneralModel):
 
 
         super().__init__(formula, data, conf_level=conf_level, family="binomial", link="logit",
-                         solver_options=self.SolverOptions, table_decimals=table_decimals
-                         )
+                         solver_options=self.SolverOptions, table_decimals=table_decimals)
 
         self.__name__ = "Researchpy.LogisticRegression"
 
         # Initializing betas
-        self._GeneralModel__initialize_betas(initial_betas=initial_betas, initial_betas_method=initial_betas_method)
+        #self._GeneralModel__initialize_betas(initial_betas=initial_betas, initial_betas_method=initial_betas_method)
+        self._GeneralizedLinearModel__initialize_betas(initial_betas=initial_betas, initial_betas_method=initial_betas_method)
 
         # Fit the model
-        self._GeneralModel__fit_model()
+        self.fit()
 
         # Compute standard errors and statistics
         self._compute_statistics()
@@ -102,7 +103,6 @@ class LogisticRegression(GeneralModel):
         # Display the model results summary
         if display_summary:
             self.summary()
-
 
 
     def _get_from_child(self, **kwargs):
@@ -366,7 +366,7 @@ class LogisticRegression(GeneralModel):
             self._beta_type = "coef"
 
 
-        # Use the new GeneralModel flow to build ModelResults
+        # Use the new GeneralizedLinearModel flow to build ModelResults
         mr = self._get_ModelResults(return_type=return_type,
                                     pretty_format=pretty_format,
                                     table_decimals=self._table_decimals,

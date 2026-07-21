@@ -79,7 +79,7 @@ classDiagram
         +results()
     }
 
-    class GeneralModel {
+    class GeneralizedLinearModel {
         +fit()
         +results()
     }
@@ -87,7 +87,7 @@ classDiagram
     CoreDataclass <|-- SyntaxSpec
     ModelMatrix <|-- BaseModel
     BaseModel <|-- LinearModel
-    BaseModel <|-- GeneralModel
+    BaseModel <|-- GeneralizedLinearModel
 
     note for SyntaxSpec "Universal input gate.\nSubclasses override from_args()\nfor domain-specific validation."
     note for ModelMatrix "Formulaic-backed design matrix.\nInherited by BaseModel for\nmodel fitting infrastructure."
@@ -324,32 +324,35 @@ That's it. `_route_computation` handles:
 ### Adding a New Model (using syntax_engine + matrix_design)
 
 ```python
-from researchpy.core.model import BaseModel
+from models.base import BaseModel
+
+
+
 
 class PoissonModel(BaseModel):
-    """Poisson regression model."""
+   """Poisson regression model."""
 
-    def __init__(self, formula_like, data=None, conf_level=0.95):
-        super().__init__(
-            formula_like, data,
-            family="poisson", link="log",
-            conf_level=conf_level,
-        )
-        # BaseModel.__init__ already:
-        #   1. Calls ModelMatrix.__init__(formula, data) → builds DV, IV
-        #      which internally calls syntax_engine.variable_information()
-        #   2. Sets up ModelFit, FitStatistics, CoefResults containers
-        #   3. Builds model_terms from formulaic ModelSpec
+   def __init__(self, formula_like, data=None, conf_level=0.95):
+      super().__init__(
+              formula_like, data,
+              family="poisson", link="log",
+              conf_level=conf_level,
+      )
+      # BaseModel.__init__ already:
+      #   1. Calls ModelMatrix.__init__(formula, data) → builds DV, IV
+      #      which internally calls syntax_engine.variable_information()
+      #   2. Sets up ModelFit, FitStatistics, CoefResults containers
+      #   3. Builds model_terms from formulaic ModelSpec
 
-    def fit(self):
-        """Fit via IRLS or MLE."""
-        # self.DV, self.IV are ready (from ModelMatrix)
-        # self.n, self.k are set (from BaseModel)
-        ...
+   def fit(self):
+      """Fit via IRLS or MLE."""
+      # self.DV, self.IV are ready (from ModelMatrix)
+      # self.n, self.k are set (from BaseModel)
+      ...
 
-    def results(self, return_type="Dataframe"):
-        """Return formatted results."""
-        ...
+   def results(self, return_type="Dataframe"):
+      """Return formatted results."""
+      ...
 ```
 
 **What you get for free from the inheritance chain:**
@@ -387,7 +390,7 @@ flowchart BT
     MD["matrix_design.py\n(ModelMatrix, DMatrix, DesignMatrices)"]
     BM["core/model.py\n(BaseModel)"]
     LM["models/linear_model.py\n(LinearModel)"]
-    GM["models/general_model.py\n(GeneralModel)"]
+    GM["models/general_model.py\n(GeneralizedLinearModel)"]
     COMP["statistics/_compute.py\n(_route_computation)"]
     DESC["statistics/describe.py\n(describe)"]
     CT["statistics/central_tendency.py\n(mean, median, quartiles)"]

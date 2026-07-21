@@ -1,6 +1,8 @@
-import pytest
 import pandas as pd
-from researchpy.models.multivariable import logistic
+from models.generalized import logistic
+
+
+
 
 def test_logistic_initialization():
     # Create sample data

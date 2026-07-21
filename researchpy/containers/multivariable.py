@@ -27,16 +27,22 @@ Or attribute access::
 
 from __future__ import annotations
 
-from .base import CoreDataclass
-from dataclasses import dataclass, field, fields
-from typing import Union, Any, Dict, Optional
-
 import numpy as np
 import pandas as pd
 import re
 
+from dataclasses import dataclass, field, fields
+from typing import Union, Any, Dict, Optional, TYPE_CHECKING
+
 import formulaic
+
 from itertools import product
+
+
+if TYPE_CHECKING:
+    from researchpy.models.families import Family
+from researchpy.containers.base import CoreDataclass
+
 
 
 
@@ -76,32 +82,122 @@ class ModelFit(CoreDataclass):
 
 
 
+
+@dataclass
+class ModelDesignSpec(CoreDataclass):
+    """
+
+    Standardized container for formulaic model output + Researchpy model fit information.
+
+    The following attributes are defined:
+    - ``formula``: The model formula as a string (e.g., "y ~ x1 + x2").
+    - ``family``: The distribution family as a ``Family`` instance (e.g., ``GaussianFamily()``, ``BinomialFamily()``).
+    - ``link``: The link function used in the model (e.g., "identity", "logit").
+    - ``n``: The number of observations used to fit the model.
+    - ``k``: The number of predictors (including intercept) in the model.
+    - ``ci_level``: The confidence interval level used for coefficient estimates (default is 0.95).
+    - ``dv``: A list of dependent variable names (optional).
+    - ``iv``: A list of independent variable names (optional).
+    - ``model_display_name``: A user-friendly name for the model (optional).
+    - ``model``: The internal name of the model (optional).
+
+    """
+
+    # Model specification attributes
+    formula: Optional[str] = None
+    model_terms: Optional[ModelTerms] = None
+    DV: Optional[np.ndarray] = None
+    IV: Optional[np.ndarray] = None
+    dv_term_names: Optional[list] = None
+    iv_term_names: Optional[list] = None
+    ci_level: Optional[float] = 0.95
+    # The distribution family and link function
+    family: Optional[Family] = None
+    model: Optional[str] = None
+    model_display_name: Optional[str] = None
+    link: Optional[str] = None
+    # Attributes for model fit and estimation
+    solver_options: Optional[SolverOptions] = None
+    solver_method: Optional[str] = None
+    # Additional information
+    additional_stats: Optional[dict] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+    def __post_init__(self):
+        self.__name__ = "Researchpy.ModelDesignSpec"
+
+
+    @classmethod
+    def from_formulaic(cls, formula: str, data: object, output: str = "numpy",
+                       include_intercept: bool = True, ensure_full_rank: bool = True, **kwargs, ) -> "ModelDesignSpec":
+        """Build from a formulaic model_matrix call."""
+        if not include_intercept:
+            formula = formula + " + 0"
+
+        mm = formulaic.Formula(formula,
+                               _parser=formulaic.parser.DefaultFormulaParser(include_intercept=include_intercept),
+                               **kwargs,
+                               ).get_model_matrix(data, output=output, ensure_full_rank=ensure_full_rank, **kwargs)
+
+        # Extract what we need
+        dv_term_names = (
+            list(mm.lhs.model_spec.column_names)
+            if hasattr(mm.lhs.model_spec, "column_names")
+            else [str(t) for t in mm.lhs.model_spec.terms]
+        )
+        iv_term_names = (
+            list(mm.rhs.model_spec.column_names)
+            if hasattr(mm.rhs.model_spec, "column_names")
+            else [str(t) for t in mm.rhs.model_spec.terms]
+        )
+
+        model_terms = ModelTerms.from_model_spec(mm.rhs.model_spec)
+
+        return cls(DV=mm.lhs,
+                   IV=mm.rhs,
+                   model_terms=model_terms,
+                   formula=formula,
+                   dv_term_names=dv_term_names,
+                   iv_term_names=iv_term_names,
+                   metadata={
+                                "include_intercept": include_intercept,
+                                "ensure_full_rank" : ensure_full_rank,
+                                "output"           : output,
+                            } | kwargs,
+                   )
+
+
+
+
 @dataclass
 class SolverOptions(CoreDataclass):
     """
     Standardized container for optimization/solver parameters.
 
-    Used by ``GeneralModel`` and its subclasses (``LogisticRegression``,
-    ``PoissonRegression``, etc.) to configure the iterative solver.
+    Used by ``BaseModel`` and is required for all of its subclasses (``LinearModel``, ``Anova``, ``GeneralizedLinearModel``,
+    ``LogisticRegression``, ``PoissonRegression``, etc.) to configure the solver (analytical or iterative).
 
     Parameters
     ----------
     estimation_method : str
-        High-level estimation method. One of ``"ols"``, ``"mle"``, ``"irls"``.
-        Default is ``"ols"``.
-    algorithm : str or None
-        Specific optimization algorithm to use (e.g., ``"BFGS"``,
-        ``"newton-raphson"``, ``"L-BFGS-B"``). Default is ``None``, meaning
-        the model class will choose a sensible default.
+        Solver method (a.k.a. estimator or estimation principal), current supported options are ``"ols"`` or ``"mle"``.
+        If user specifies an option outside what is currently supported, the user must also provide the algorithm to
+        use that is able to be used with scipy.optimize.minimize;
+        see https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.minimize.html#scipy.optimize.minimize
+        for passing custom method.
     obj_function : str
         Objective function type. One of ``"numeric"``, ``"log-likelihood"``.
         Default is ``"numeric"``.
+    algorithm : str or None
+        Specific optimization algorithm to use (e.g., ``"BFGS"``, ``"newton-raphson"``, ``"L-BFGS-B"``). Default is
+        ``None``, meaning the model class will choose a sensible default.
     tol : float
-        Convergence tolerance for the optimizer. Default is ``1e-7``.
+        Convergence tolerance for the coefficient vector. Default is ``1e-6`` unless coefficient estimators programmed with mle then == 1e-4.
     tolerance : float
-        Convergence tolerance for the coefficient vector. Default is ``1e-6``.
+        Convergence tolerance for the coefficient vector. Default is ``1e-6`` unless coefficient estimators programmed with mle then == 1e-4.
     logtolerance : float
-        Convergence tolerance for the log likelihood. Default is ``1e-7``.
+        Convergence tolerance for the log likelihood. Default is ``1e-7`` unless log likelhood estimators programmed with mle then == 0
     max_iter : int
         Maximum number of iterations allowed. Default is ``300``.
     display : bool
@@ -132,10 +228,10 @@ class SolverOptions(CoreDataclass):
     obj_function: str
 
     # Irrelevant for OLS
-    algorithm: Optional[str] = None       # Defaults to "newton-raphson" if estimation_method not
-    tol: float = 1e-7
-    tolerance: float = 1e-6         # The default in Stata 19, unless estimators programmed with ml then == 1e-4
-    logtolerance: float = 1e-7      # The default in Stata 19, unless estimators programmed with ml then == 0
+    algorithm: Optional[str] = None       # Defaults to "IRLS" if estimation_method == "mle", otherwise defaults to "numeric" for OLS
+    tol: float = 1e-6               # The default in Stata 19, unless coefficient estimators programmed with ml then == 1e-4
+    tolerance: float = 1e-6         # The default in Stata 19, unless coefficient estimators programmed with ml then == 1e-4
+    logtolerance: float = 1e-7      # The default in Stata 19, unless log likelhood estimators programmed with ml then == 0
     max_iter: int = 300
     regularization: Optional[str] = None
     alpha: float = 0.0
@@ -143,9 +239,22 @@ class SolverOptions(CoreDataclass):
 
     def __post_init__(self):
         self.__name__ = "Researchpy.SolverOptions"
-        if self.estimation_method not in ['ols', 'ordinary_least_squares', 'numeric', 'analytic']:
-            if self.algorithm is None: self.algorithm = 'newton-raphson'
+
+        # -- Setting default solver algorithm and objective_function options based on estimation method provided -- #
+        if self.estimation_method.lower() in ['maximum_likelihood', 'maximum likelihood estimation', 'mle']:
+            if self.algorithm is None: self.algorithm = 'IRLS'
             if self.obj_function is None: self.obj_function = 'log-likelihood'
+            self.tol = 1e-4
+            self.tolerance = 1e-4
+            self.logtolerance = 0.0
+
+        elif self.estimation_method.lower() in ['ols', 'ordinary_least_squares', 'numeric', 'analytic']:
+            if self.algorithm is None: self.algorithm = 'numeric'
+            if self.obj_function is None: self.obj_function = 'ssr'
+
+        else:
+            if not hasattr(self, "estimation_method"):
+                raise NotImplementedError(f"Must have a self.SolverOptions.estimation_method attribute.")
 
 
     @classmethod
@@ -203,6 +312,8 @@ class SolverOptions(CoreDataclass):
             "maxiter": self.max_iter,
             "gtol": self.tol,
         }
+
+    
 
 
 @dataclass
@@ -1112,4 +1223,5 @@ class ModelTerms(CoreDataclass):
 
     def __repr__(self):
         return self.info()
+
 

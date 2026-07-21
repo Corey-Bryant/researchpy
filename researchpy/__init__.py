@@ -15,16 +15,22 @@ from .predict import *
 from . import datasets
 
 # These are deprecated and will be removed in future versions
-from .model import *
-from .ols import ols
-from .anova import anova
+#from .model import model
+#from .ols import ols
+#from .anova import anova
+from researchpy.model import model
+from researchpy.ols import ols
+from researchpy.anova import anova
 
 
 # New modular structure imports
-from researchpy.core import BaseModel, as_array, validate_array
+from researchpy.core import as_array, validate_array
 
-from researchpy.models import CoreModel, GeneralModel
-from researchpy.models.multivariable import Regress, LinearRegression, LM, Anova, ANOVA, LogisticRegression, Logistic
+from researchpy.models import (
+    BaseModel,
+    Regress, LinearRegression, LM, Anova, ANOVA,
+    GLM, GeneralizedLinearModel, Logistic, LogisticRegression,
+)
 
 # Statistical summary subpackage
 from researchpy.statistics import *

@@ -2,7 +2,7 @@
 from researchpy.containers.base import CoreDataclass, VariableInfo, CodeBook
 from researchpy.containers.univariate import SummaryResult
 from researchpy.containers.multivariable import (
-    ModelFit, ModelEffects, CoefResults, FactorEffects, FitStatistics, ModelResults, TestResults,
+    ModelFit, ModelDesignSpec, ModelEffects, CoefResults, FactorEffects, FitStatistics, ModelResults, TestResults,
     Term, ModelTerms, SolverOptions
 )
 
@@ -12,6 +12,7 @@ __all__ = [
     "CodeBook",
     "SummaryResult",
     'ModelFit',
+    'ModelDesignSpec',
     'ModelEffects',
     'CoefResults',
     'FactorEffects',

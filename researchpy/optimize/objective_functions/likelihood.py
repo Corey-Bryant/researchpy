@@ -6,7 +6,9 @@ def log_likelihood(y_e):
     return np.sum(y_e) - np.sum(np.log((1 + y_e)))
 
 
-def neg_log_likelihood(params, IV, DV, solver_options, distribution_family="binomial", link_function="logit", tracker=None):
+def neg_log_likelihood(params, IV, DV,
+                       solver_options, distribution_family="binomial", link_function="logit",
+                       tracker=None):
     """Negative log-likelihood function for scipy.optimize.
 
     Parameters
@@ -70,7 +72,8 @@ def neg_log_likelihood(params, IV, DV, solver_options, distribution_family="bino
 
 
 
-def gradient_neg_log_likelihood(params, IV, DV, solver_options, distribution_family="binomial", link_function="logit"):
+def gradient_neg_log_likelihood(params, IV, DV,
+                                solver_options, distribution_family="binomial", link_function="logit"):
     """Gradient of negative log-likelihood.
 
     Parameters

@@ -6,8 +6,7 @@ This module provides the OLS class for fitting linear regression models
 using the ordinary least squares method.
 """
 
-from researchpy.models.linear_model import LinearModel
-from researchpy.models.postestimation.predict import predict
+from researchpy.models.linear.linear_model import LinearModel
 
 
 class Regress(LinearModel):
@@ -74,10 +73,11 @@ class Regress(LinearModel):
                  na_rep='', pretty_format=True,):
 
         self._test_stat_name = "t"
+        self.__name__ = "Researchpy.Regress"
 
         super().__init__(formula=formula, data=data, conf_level=conf_level, table_decimals=table_decimals)
 
-        self.__name__ = "Researchpy.Regress"
+        #self.__name__ = "Researchpy.Regress"
         self.ModelDesignSpec.model = self.__name__
         self.ModelDesignSpec.model_display_name = self._get_model_display_name()
 

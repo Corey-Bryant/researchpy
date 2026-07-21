@@ -120,8 +120,19 @@ class LikelihoodRatioTest:
         The null model fitting is tailored to the specific family/link combination
         of the full model to ensure proper comparison.
         """
-        family = getattr(self.model, '_family', 'binomial')
-        link = getattr(self.model, '_link', 'logit')
+        # Resolve the Family instance from ModelDesignSpec; fall back to
+        # string-based look-up for backward compatibility.
+        family_obj = getattr(self.model, 'ModelDesignSpec', None)
+        if family_obj is not None:
+            family_obj = getattr(family_obj, 'family', None)
+
+        if family_obj is not None and hasattr(family_obj, 'name'):
+            family = family_obj.name          # e.g. "binomial"
+            link = family_obj.link            # e.g. "logit"
+        else:
+            # Legacy fallback
+            family = getattr(self.model, '_family', 'binomial')
+            link = getattr(self.model, '_link', 'logit')
         DV = self.model.DV
         nobs = self.model.n
 

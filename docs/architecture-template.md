@@ -27,7 +27,7 @@ classDiagram
         +_summary_coef_table(df, width) → ANOVA table
     }
 
-    class GeneralModel {
+    class GeneralizedLinearModel {
         +_summary_header_left(width) → [model_name, Log-L]
         +_summary_header_right(width, descriptives_df) → MLE stats
     }
@@ -43,9 +43,9 @@ classDiagram
 
     CoreModel <|-- OLS
     OLS <|-- Anova
-    CoreModel <|-- GeneralModel
-    GeneralModel <|-- LogisticRegression
-    GeneralModel <|-- FutureModel
+    CoreModel <|-- GeneralizedLinearModel
+    GeneralizedLinearModel <|-- LogisticRegression
+    GeneralizedLinearModel <|-- FutureModel
 
     note for CoreModel "Template method pattern:\nsummary() orchestrates\n_get_summary_parts()\n_summary_header()\n_summary_coef_table()"
     note for FutureModel "Only needs:\n• results()\n• _get_summary_parts()"
@@ -126,7 +126,7 @@ flowchart TD
 
 ## Method Override Matrix
 
-| Method | CoreModel | OLS | Anova | GeneralModel | LogisticRegression |
+| Method | CoreModel | OLS | Anova | GeneralizedLinearModel | LogisticRegression |
 |--------|-----------|-----|-------|--------------|-------------------|
 | `summary()` | ✅ Template | inherited | inherited | inherited | ✅ Adds `report` kwarg (delegates to `super()`) |
 | `_get_summary_parts()` | ❌ `NotImplementedError` | ✅ | ✅ | ❌ (no `results()`) | ✅ |
@@ -147,7 +147,7 @@ flowchart TD
 To add `summary()` support to a new model (e.g., Poisson regression):
 
 ```python
-class PoissonRegression(GeneralModel):
+class PoissonRegression(GeneralizedLinearModel):
 
     def results(self, return_type="Dataframe", ...):
         # ... build and return (meta_df, description_df, coef_df) ...

@@ -2,8 +2,7 @@
 """
 ResearchPy Code Module
 
-This module provides the core classes for ResearchPy, including result containers, base model classes, and
-helper/utility functions.
+This module provides the core classes for ResearchPy, including result containers, helper/utility functions.
 
 Usage:
     >>> import researchpy.core
@@ -11,11 +10,10 @@ Usage:
 
 """
 
-from .data_utils import as_array, validate_array
-from researchpy.core.matrix_design import DesignMatrix, ModelDesignSpec
-from researchpy.core.model import BaseModel
-from .syntax_engine import SyntaxSpec, TermSpec, resolve
-from .matrix_engine import build_indicator_matrix, grouped_statistic, grouped_statistic_pivot
+from researchpy.core.data_utils import as_array, validate_array
+from researchpy.core.matrix_design import DesignMatrix
+from researchpy.core.syntax_engine import SyntaxSpec, TermSpec, resolve
+from researchpy.core.matrix_engine import build_indicator_matrix, grouped_statistic, grouped_statistic_pivot
 
 
 # Define what gets exported with "from researchpy.core import *"
@@ -23,8 +21,6 @@ __all__ = [
     'as_array',
     'validate_array',
     'DesignMatrix',
-    'ModelDesignSpec',
-    'BaseModel',
     'SyntaxSpec',
     'TermSpec',
     'resolve',

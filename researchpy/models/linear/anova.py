@@ -6,17 +6,14 @@ This module provides the Anova class for conducting analysis of variance
 using sum of squares types I, II, and III.
 """
 
-import re  # used in _build_type3_terms (legacy patsy-style patterns)
-
 import numpy as np
 import scipy.stats
 import formulaic
 import pandas as pd
 from pandas import DataFrame
 
-from researchpy.models.linear_model import LinearModel
-from researchpy.containers import ModelResults
-from researchpy.containers import FactorEffects
+from researchpy.models.linear.linear_model import LinearModel
+from researchpy.containers import ModelResults, FactorEffects
 from researchpy.utility import as_numeric
 
 
@@ -131,7 +128,7 @@ class Anova(LinearModel):
         measures for a single factor.
 
         All computations use the model-level MSE and SS values stored in
-        ``self. sModelEffects``.
+        ``self.ModelEffects``.
 
         Parameters
         ----------

@@ -1,7 +1,7 @@
 from typing import Any
 from pandas import DataFrame
 
-from researchpy.core.model import BaseModel
+from researchpy.models.base import BaseModel
 from researchpy.containers import ModelResults, FactorEffects, SolverOptions
 from researchpy.utility import *
 
@@ -9,22 +9,20 @@ from researchpy.utility import *
 class LinearModel(BaseModel):
     """
 
-    This is a subclass of core_model for linear statistical models that use ordinary least squares.
+    This is a subclass of BaseModel for linear statistical models that use ordinary least squares.
 
     """
 
     def __init__(self, formula, data=None, conf_level=0.95, table_decimals=None):
 
-        self.FactorEffects = FactorEffects()
-        solver_options = SolverOptions(
-                estimation_method="ols",
-                obj_function="ssr",
-                algorithm=None,
-        )
         if data is None:  data = {}
+        self.FactorEffects = FactorEffects()
+        self.SolverOptions = SolverOptions(estimation_method="ols",
+                                           obj_function="ssr",
+                                           algorithm=None,)
 
         super().__init__(formula=formula, data=data, conf_level=conf_level,
-                         family="gaussian", link="normal", solver_options=solver_options,
+                         family="gaussian", link="normal", solver_options=self.SolverOptions,
                          table_decimals=table_decimals)
 
         self.__name__ = "Researchpy.LinearModel"
@@ -45,8 +43,9 @@ class LinearModel(BaseModel):
         self.__compute_beta_se_and_stats()
 
 
-    def __fit_model(self):
+    def fit(self, estimation_principal=None, **kwargs):
         ...
+
 
 
 
