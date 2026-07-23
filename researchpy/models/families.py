@@ -86,6 +86,24 @@ class Family(ABC):
     # ----- abstract interface -----
 
     @abstractmethod
+    def link_forward(self, mu: np.ndarray) -> np.ndarray:
+        """Link function  g(μ) → η.
+
+        Maps the conditional mean *mu* to the linear predictor scale.
+
+        Parameters
+        ----------
+        mu : np.ndarray
+            Conditional mean, shape ``(n, 1)`` or ``(n,)``.
+
+        Returns
+        -------
+        np.ndarray
+            Linear predictor η, same shape as *mu*.
+        """
+        ...
+
+    @abstractmethod
     def link_inverse(self, eta: np.ndarray) -> np.ndarray:
         """Inverse link function  g⁻¹(η) → μ.
 
@@ -247,6 +265,26 @@ class Family(ABC):
 
         return eta + (y - mu) / d
 
+    def initial_intercept(self, y: np.ndarray) -> float:
+        """Smart intercept initialization: g(mean(y)).
+
+        Computes the sample mean of the response and applies the forward
+        link function to produce a sensible starting value for the
+        intercept parameter in iterative fitting algorithms.
+
+        Parameters
+        ----------
+        y : np.ndarray
+            Observed response values.
+
+        Returns
+        -------
+        float
+            Initial intercept estimate on the linear predictor scale.
+        """
+        y_mean = float(np.mean(y))
+        return float(self.link_forward(np.atleast_1d(y_mean)).ravel()[0])
+
     # ----- representation ----- #
     def __call__(self) -> str:
         """Return the canonical family key when the instance is called."""
@@ -284,6 +322,11 @@ class BinomialFamily(Family):
     distribution: str = "Binomial"
     name: str = distribution.lower()
     link: str = "logit"
+
+    def link_forward(self, mu: np.ndarray) -> np.ndarray:
+        """Logit link: g(μ) = log(μ / (1 − μ))."""
+        mu = np.clip(mu, 1e-15, 1 - 1e-15)
+        return np.log(mu / (1 - mu))
 
     def link_inverse(self, eta: np.ndarray) -> np.ndarray:
         """Logistic (sigmoid) function — numerically stable via ``scipy.special.expit``."""
@@ -340,6 +383,10 @@ class PoissonFamily(Family):
     distribution: str = "Poisson"
     name: str = distribution.lower()
     link: str = "log"
+
+    def link_forward(self, mu: np.ndarray) -> np.ndarray:
+        """Log link: g(μ) = log(μ)."""
+        return np.log(np.clip(mu, 1e-15, None))
 
     def link_inverse(self, eta: np.ndarray) -> np.ndarray:
         """Exponential inverse link.
@@ -398,6 +445,10 @@ class GaussianFamily(Family):
     distribution: str = "Gaussian"
     name: str = distribution.lower()
     link: str = "identity"
+
+    def link_forward(self, mu: np.ndarray) -> np.ndarray:
+        """Identity link: g(μ) = μ."""
+        return mu
 
     def link_inverse(self, eta: np.ndarray) -> np.ndarray:
         """Identity — μ = η."""

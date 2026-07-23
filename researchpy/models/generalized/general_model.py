@@ -10,7 +10,7 @@ from researchpy.optimize import (
     OptimizationTracker,
     _ols_estimation_principal, _mle_estimation_principal,
     neg_log_likelihood, gradient_neg_log_likelihood,
-    IRLS, newton_raphson,
+    IRLS,
 )
 
 
@@ -99,8 +99,7 @@ class GeneralizedLinearModel(BaseModel):
             IV=self.IV,
             DV=self.DV,
             solver_options=self.SolverOptions,
-            distribution_family=self.ModelDesignSpec.family.name,
-            link_function=self.ModelDesignSpec.family.link,
+            family=self.ModelDesignSpec.family,
             tracker=self._OptimizationTracker
         )
 
@@ -112,8 +111,7 @@ class GeneralizedLinearModel(BaseModel):
             IV=self.IV,
             DV=self.DV,
             solver_options=self.SolverOptions,
-            distribution_family=self.ModelDesignSpec.family.name,
-            link_function=self.ModelDesignSpec.family.link
+            family=self.ModelDesignSpec.family
         )
 
 
@@ -121,6 +119,10 @@ class GeneralizedLinearModel(BaseModel):
         self.logL = []
         self.nfev = -1
         converged = False
+
+        # Initialize betas if not already set (default is empty list from CoefResults)
+        if not isinstance(self.CoefResults.betas, np.ndarray) or self.CoefResults.betas.size == 0:
+            self.CoefResults.betas = np.zeros((self.k, 1))
 
 
         if self.SolverOptions.display:
@@ -132,7 +134,8 @@ class GeneralizedLinearModel(BaseModel):
 
             options = self.SolverOptions.to_scipy_options() | {"family": self.ModelDesignSpec.family,
                                                                "IV": self.IV,
-                                                               "DV": self.DV}
+                                                               "DV": self.DV,
+                                                               "display": self.SolverOptions.display,}
 
             result = _mle_estimation_principal(lambda p, *a: 0,
                                                x0=self.CoefResults.betas.flatten(),
@@ -140,22 +143,6 @@ class GeneralizedLinearModel(BaseModel):
                                                callback=None,
                                                options=options,
                                                )
-
-        elif self.SolverOptions.algorithm.lower() in ['newton-raphson', 'nr']:
-            #success, self.CoefResults.betas, self.logL = newton_raphson(IV=self.IV,
-            #                                                              DV=self.DV,
-            #                                                              betas=self.CoefResults.betas,
-            #                                                              tol=self.SolverOptions.tol,
-            #                                                              max_iter=self.SolverOptions.max_iter,
-            #                                                              display=self.SolverOptions.display,
-            #                                                              )
-            result = newton_raphson(IV=self.IV,
-                                    DV=self.DV,
-                                    betas=self.CoefResults.betas,
-                                    tol=self.SolverOptions.tol,
-                                    max_iter=self.SolverOptions.max_iter,
-                                    display=self.SolverOptions.display,
-                                    )
 
         else:
             #if self.SolverOptions.algorithm == "newton-raphson": self.SolverOptions.algorithm = 'Newton-CG'
@@ -171,47 +158,47 @@ class GeneralizedLinearModel(BaseModel):
         # -- Evaluating if the optimization converged and storing results accordingly. -- #
         if result.success:
             self.CoefResults.betas = result.x.reshape(-1, 1)
-            self.logL.append(-result.fun)
-            self.nfev = result.nfev
+            self.FitStatistics.log_likelihood = -result.fun
             converged = True
 
             # Perform Likelihood Ratio Test (full model vs null)
-            self._lr_test = LikelihoodRatioTest(self, store_null=True)
+            lr_test = LikelihoodRatioTest(self, store_null=True, display_summary=False)
+            self.FitStatistics._lr_test = lr_test
 
             if self.SolverOptions.display:
                 print(f"")
                 print(f"")
 
-        else:
-            if self.SolverOptions.display:
-                print(f"Warning: {self.SolverOptions.estimation_method} using {self.SolverOptions.algorithm} did not converge ({result.message})")
+            # ---- Populate FitStatistics dataclass from LR test results ----
+            ll_full = -result.fun
+            ll_null = lr_test.FitStatistics.log_likelihood_restricted
 
+            self.FitStatistics.test_stat_name = lr_test.FitStatistics.test_stat_name
+            self.FitStatistics.test_stat = lr_test.FitStatistics.test_stat
+            self.FitStatistics.df_model = lr_test.FitStatistics.df_model
+            self.FitStatistics.test_pval = lr_test.FitStatistics.test_pval
 
-        # ---- Populate FitStatistics dataclass from LR test results ----
-        ll_full = self.logL[-1] if self.logL else None
-        ll_null = self._lr_test.LL_restricted
-
-        self.FitStatistics.log_likelihood = ll_full
-        self.FitStatistics.test_stat_name = "LR Chi^2"
-        self.FitStatistics.test_stat = self._lr_test.LR_chi2
-        self.FitStatistics.df_model = self._lr_test.df
-        self.FitStatistics.test_pval = self._lr_test.p_value
-
-        # AIC = -2·LL + 2·k
-        if ll_full is not None:
+            # AIC = -2·LL + 2·k
             self.FitStatistics.aic = -2 * ll_full + 2 * self.k
             # BIC = -2·LL + k·ln(n)
             self.FitStatistics.bic = -2 * ll_full + self.k * np.log(self.n)
 
-        # McFadden's Pseudo R² = 1 - (LL_full / LL_null)
-        if ll_full is not None and ll_null is not None and ll_null != 0:
-            self.FitStatistics.r_squared_pseudo = 1 - (ll_full / ll_null)
+            # McFadden's Pseudo R² = 1 - (LL_full / LL_null)
+            if lr_test.FitStatistics.r_squared_pseudo:
+                self.FitStatistics.r_squared_pseudo = lr_test.FitStatistics.r_squared_pseudo
 
-        self.FitStatistics.additional_stats = {
-            "n_iterations": self.nfev,
-            "ll_null": ll_null,
-            "converged": converged or (self.logL is not None and len(self.logL) > 0),
-        }
+            elif ll_full is not None and ll_null is not None and ll_null != 0:
+                self.FitStatistics.r_squared_pseudo = 1 - (ll_full / ll_null)
+
+            self.FitStatistics.additional_stats = {
+                "n_iterations": result.nfev,
+                "converged": converged or (self.FitStatistics.log_likelihood is not None and len(self.FitStatistics.log_likelihood) > 0),
+                "log_likelihood_null": ll_null,
+            }
+
+        else:
+            if self.SolverOptions.display:
+                print(f"Warning: {self.SolverOptions.estimation_method} using {self.SolverOptions.algorithm} did not converge ({result.message})")
 
 
     def predict(self, estimate=None, trans=None, decimals=4, **kwargs):

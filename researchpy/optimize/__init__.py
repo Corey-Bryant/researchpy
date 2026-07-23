@@ -17,7 +17,6 @@ from researchpy.optimize.objective_functions import (
     gradient_neg_log_likelihood
 )
 from researchpy.optimize.algorithms import (
-    newton_raphson,
     IRLS,
 )
 
@@ -33,7 +32,6 @@ __all__ = [
     "gradient_neg_log_likelihood",
     "_ols_estimation_principal",
     "_mle_estimation_principal",
-    "newton_raphson",
     "IRLS",
     "OptimizationTracker",
 ]

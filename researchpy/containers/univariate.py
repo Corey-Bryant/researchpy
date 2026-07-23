@@ -25,6 +25,7 @@ class UnivariateModel(CoreDataclass):
     ----------
     name : str or None
         The variable name.
+    test_name:
     statistics : dict
         Ordered mapping of statistic name -> computed value.
 
@@ -88,7 +89,7 @@ class SummaryResult(CoreDataclass):
 
     Examples
     --------
-    >>> result = UnivariateSummary(name="age", statistics={"N": 100, "Mean": 35.4})
+    >>> result = SummaryResult(name="age", statistics={"N": 100, "Mean": 35.4})
     >>> result.to_dataframe()
        Name    N  Mean
     0   age  100  35.4

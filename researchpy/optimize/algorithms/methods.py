@@ -1,62 +1,4 @@
 import numpy as np
-from scipy.special import expit
-
-
-
-def newton_raphson(IV, DV, betas, tol, max_iter, display):
-    """Newton-Raphson optimization algorithm."""
-    from scipy.optimize import OptimizeResult
-
-    converged = False
-    it = 0
-    error = np.ones_like(betas)
-    logL = []
-    while np.any(error > tol) and it < max_iter:
-        linear_pred = IV @ betas
-        p = expit(linear_pred)  # Use expit for stability
-
-        w = p * (1 - p).reshape(-1, 1)
-        H = -(IV.T @ (IV * w))
-        G = IV.T @ (DV - p)
-
-        try:
-            betas_new = betas - np.linalg.inv(H) @ G
-        except np.linalg.LinAlgError:
-            betas_new = betas - np.linalg.pinv(H) @ G
-
-        error = np.abs(betas_new - betas)
-        betas = betas_new
-
-        ll = np.sum(DV * np.log(p + 1e-12) + (1 - DV) * np.log(1 - p + 1e-12))
-        logL.append(ll)
-
-        it += 1
-        if display:
-            print(f"NR Iteration {it}: Log-likelihood = {ll:.4f}")
-
-
-    if np.any(error < tol) and (it < max_iter and it > 1): converged = True
-    if display:
-        if converged:
-            print(f"Newton-Raphson completed in {it} iterations")
-
-        elif not converged:
-            print(f"Newton-Raphson did not converge after {it} iterations. "
-                  f"Final ΔDeviance = {error:.2e}")
-
-    #return converged, betas, logL
-    return OptimizeResult(x=betas.ravel(),
-                          success=converged,
-                          fun=-logL[-1],                    # negative log-likelihood (minimisation convention)
-                          nit=it,
-                          nfev=it,                          # IRLS has no separate "function evaluations"
-                          message=(f"IRLS converged in {it} iterations."
-                                   if converged
-                                   else f"IRLS did not converge after {it} iterations."),
-                          # Extra attributes for ResearchPy diagnostics
-                          logL=logL,
-                          deviance=error,
-                          )
 
 
 
@@ -95,7 +37,7 @@ def IRLS(fun, x0, args=(), **options):
     **options : dict
         Solver options.  The following keys are recognised:
 
-        _Family : Family
+        family : Family
             A ``researchpy.models.families.Family`` instance that
             provides ``link_inverse``, ``variance``, ``dmu_deta``,
             ``working_weights``, ``working_response``, and
@@ -134,7 +76,7 @@ def IRLS(fun, x0, args=(), **options):
     Raises
     ------
     ValueError
-        If required options (``_Family``, ``IV``, ``DV``) are missing.
+        If required options (``family``, ``IV``, ``DV``) are missing.
 
     References
     ----------
@@ -159,7 +101,7 @@ def IRLS(fun, x0, args=(), **options):
     from scipy.optimize import OptimizeResult
 
     # ---- Unpack required options ----
-    family = options.get("family") or options.get("_Family")
+    family = options.get("family")
     IV = options.get("IV")
     DV = options.get("DV")
 
@@ -215,7 +157,6 @@ def IRLS(fun, x0, args=(), **options):
             XtWX = IV.T @ (IV * w)
             XtWz = IV.T @ (z * w)
             betas_new = np.linalg.pinv(XtWX) @ XtWz
-        #betas_new = _ols_estimation_principal(IV_w, z_w)       Could replace the try-except immediately above
 
 
         # Step 4: Convergence check via deviance
@@ -228,18 +169,14 @@ def IRLS(fun, x0, args=(), **options):
         deviance_change = abs(prev_deviance - deviance)
 
         if display:
-            print(f"IRLS Iteration {iteration}: "
-                  f"Deviance = {deviance:.6f}, "
-                  f"ΔDeviance = {deviance_change:.2e}, "
-                  f"Log-likelihood = {ll:.4f}")
+            print(f"Log-likelihood = {ll:.4f}")
 
         betas = betas_new
 
         if deviance_change < tol and iteration > 1:
             converged = True
             if display:
-                print(f"IRLS converged in {iteration} iterations "
-                      f"(ΔDeviance = {deviance_change:.2e} < tol = {tol:.2e})")
+                print(f"IRLS converged in {iteration} iterations ")
             break
 
         prev_deviance = deviance

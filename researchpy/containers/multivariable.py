@@ -343,6 +343,30 @@ class FitStatistics(CoreDataclass):
         self.__name__ = "Researchpy.FitStatistics"
 
 
+    def __dict__(self) -> dict:
+        """Return a dict representation of the FitStatistics.
+
+        This merges the dataclass fields with any keys in `additional_stats`.
+        Keys in `additional_stats` take precedence when collisions occur.
+        """
+        # Gather all dataclass fields and their current values
+        result = {f.name: getattr(self, f.name) for f in fields(self)}
+
+        # Merge additional_stats (if present), allowing it to override named fields
+        add = self.additional_stats or {}
+
+        if not isinstance(add, dict):
+            try:
+                add = dict(add)
+            except Exception:
+                add = {}
+
+        result.update(add)
+
+        return result
+
+
+
 
 
 @dataclass
@@ -563,8 +587,6 @@ class ModelResults(CoreDataclass):
 
 
 
-
-
 @dataclass
 class TestResults(CoreDataclass):
     """
@@ -597,12 +619,56 @@ class TestResults(CoreDataclass):
     """
 
     test_name: str
-    statistics: Union[pd.DataFrame, dict]
+    statistics: dict
     details: Optional[dict] = None
 
     def __post_init__(self):
         self.__name__ = "Researchpy.TestResults"
 
+
+    def __dict__(self) -> dict:
+        """Return a dict representation of the TestResults object.
+
+        This merges the dataclass fields with any keys in `additional_stats`.
+        Keys in `additional_stats` take precedence when collisions occur.
+        """
+        # Gather all dataclass fields and their current values
+        result = {f.name: getattr(self, f.name) for f in fields(self)}
+
+        # Merge additional_stats (if present), allowing it to override named fields
+        add = self.additional_stats if hasattr(self, "additional_stats") else {}
+        if not isinstance(add, dict):
+            try:
+                add = dict(add)
+
+            except Exception:
+                add = {}
+
+        result.update(add)
+
+        return result
+
+
+    def to_dataframe(self, details_as_col: bool = False) -> pd.DataFrame:
+        """Convert the result to a pandas DataFrame (single row).
+
+        Parameters
+        ----------
+        details_as_col : bool, default False
+            Whether to include the `details` attribute as a column in the DataFrame.
+
+        Returns
+        -------
+        pandas.DataFrame
+            A single-row DataFrame with statistic names as columns.
+        """
+        stats = {"Test Name": self.test_name}
+        stats.update(self.statistics)
+
+        if hasattr(self, "details") and details_as_col:
+            stats['Details'] = self.details
+
+        return pd.DataFrame([stats])
 
 
 

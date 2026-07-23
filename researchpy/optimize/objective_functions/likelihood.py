@@ -1,15 +1,37 @@
+# -*- coding: utf-8 -*-
+"""
+Shared Likelihood Objective Functions
+
+Likelihood objective functions for optimization routines in ResearchPy. These are designed to be used with
+scipy.optimize for fitting statistical models, particularly generalized linear models (GLMs). The functions
+delegate core likelihood/gradient math to ``Family`` instances from ``researchpy.models.families``, while
+adding regularization support and optional optimization tracking.
+
+Usage:
+
+    from researchpy.models.families import get_family
+    from researchpy.optimize.objective_functions import neg_log_likelihood, gradient_neg_log_likelihood
+
+    family = get_family("binomial")
+    nll = neg_log_likelihood(params, IV, DV, solver_options, family=family)
+
+"""
 import numpy as np
-from scipy.special import expit
 
-def log_likelihood(y_e):
-
-    return np.sum(y_e) - np.sum(np.log((1 + y_e)))
+from researchpy.models.families import Family
 
 
-def neg_log_likelihood(params, IV, DV,
-                       solver_options, distribution_family="binomial", link_function="logit",
-                       tracker=None):
+def neg_log_likelihood(params: object,
+                       IV: object,
+                       DV: object,
+                       solver_options: object,
+                       family: Family = None,
+                       tracker: object = None
+                       ):
     """Negative log-likelihood function for scipy.optimize.
+
+    Delegates the core likelihood computation to the provided ``Family``
+    instance, then applies optional regularization and tracking.
 
     Parameters
     ----------
@@ -19,38 +41,38 @@ def neg_log_likelihood(params, IV, DV,
         Independent variable (design) matrix.
     DV : array-like
         Dependent variable vector.
-    solver_options : SolverOptions
+    solver_options : SolverOptions object
         A SolverOptions dataclass instance containing regularization and display settings.
-    distribution_family : str
-        Distribution family (e.g., "binomial").
-    link_function : str
-        Link function (e.g., "logit").
-    tracker : OptimizationTracker or None
+    family : Family
+        A ``researchpy.models.families.Family`` instance that provides
+        ``link_inverse`` and ``log_likelihood`` methods.
+    tracker : OptimizationTracker object, or None
         Optional tracker for monitoring optimization progress.
 
     Returns
     -------
     float
         The negative log-likelihood value.
+
+    Raises
+    ------
+    ValueError
+        If ``family`` is not provided.
     """
+    if family is None:
+        raise ValueError(
+            "A Family instance is required. Use get_family() to resolve from a string, "
+            "e.g. family=get_family('binomial')."
+        )
+
     params = np.atleast_2d(params).T  # Ensure params is a column vector
     linear_pred = IV @ params
 
-    # Apply the link function
-    if link_function == "logit":
-        p = expit(linear_pred)  # Numerically stable sigmoid
-    else:
-        raise NotImplementedError(f"Link function '{link_function}' is not implemented.")
+    # Compute fitted values via family inverse link
+    mu = family.link_inverse(linear_pred)
 
-    # Clip to avoid log(0)
-    eps = 1e-15
-    p = np.clip(p, eps, 1 - eps)
-
-    # Compute log-likelihood based on the distribution family
-    if distribution_family == "binomial":
-        ll = -np.sum(DV * np.log(p) + (1 - DV) * np.log(1 - p))
-    else:
-        raise NotImplementedError(f"Distribution family '{distribution_family}' is not implemented.")
+    # Compute negative log-likelihood via family
+    ll = -family.log_likelihood(DV, mu)
 
     # Add regularization if specified
     if solver_options.regularization == "l2":
@@ -73,8 +95,11 @@ def neg_log_likelihood(params, IV, DV,
 
 
 def gradient_neg_log_likelihood(params, IV, DV,
-                                solver_options, distribution_family="binomial", link_function="logit"):
+                                solver_options, family: Family = None):
     """Gradient of negative log-likelihood.
+
+    Computes the score (gradient) using the canonical GLM formula.
+    For canonical links, the gradient simplifies to -X'(y - μ).
 
     Parameters
     ----------
@@ -86,30 +111,34 @@ def gradient_neg_log_likelihood(params, IV, DV,
         Dependent variable vector.
     solver_options : SolverOptions
         A SolverOptions dataclass instance containing regularization settings.
-    distribution_family : str
-        Distribution family (e.g., "binomial").
-    link_function : str
-        Link function (e.g., "logit").
+    family : Family
+        A ``researchpy.models.families.Family`` instance that provides
+        ``link_inverse`` method.
 
     Returns
     -------
     ndarray
         Flattened gradient vector.
+
+    Raises
+    ------
+    ValueError
+        If ``family`` is not provided.
     """
+    if family is None:
+        raise ValueError(
+            "A Family instance is required. Use get_family() to resolve from a string, "
+            "e.g. family=get_family('binomial')."
+        )
+
     params = params.reshape(-1, 1)  # Ensure params is a column vector
     linear_pred = IV @ params
 
-    # Apply the link function
-    if link_function == "logit":
-        p = expit(linear_pred)
-    else:
-        raise NotImplementedError(f"Link function '{link_function}' is not implemented.")
+    # Compute fitted values via family inverse link
+    mu = family.link_inverse(linear_pred)
 
-    # Compute gradient based on the distribution family
-    if distribution_family == "binomial":
-        grad = -IV.T @ (DV - p)
-    else:
-        raise NotImplementedError(f"Distribution family '{distribution_family}' is not implemented.")
+    # Gradient for canonical link: -X'(y - mu)
+    grad = -IV.T @ (DV - mu)
 
     # Add regularization gradient if specified
     if solver_options.regularization == "l2":
@@ -123,6 +152,3 @@ def gradient_neg_log_likelihood(params, IV, DV,
         grad += reg_grad
 
     return grad.flatten()  # Return flattened gradient for scipy.optimize
-
-
-

@@ -13,13 +13,11 @@ Usage:
 """
 
 from researchpy.optimize.algorithms.methods import (
-    newton_raphson,
     IRLS,
 )
 
 
 # Define what gets exported with "from reserachpy.optimize.algorithms import *"
 __all__ = [
-    "newton_raphson",
     "IRLS",
 ]
