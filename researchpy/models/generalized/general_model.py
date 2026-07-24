@@ -24,9 +24,7 @@ class GeneralizedLinearModel(BaseModel):
     """
 
     def __init__(self, formula, data=None, conf_level=0.95, family="gaussian", link="identity",
-                 solver_options=None, table_decimals=None):
-
-        self.__name__ = "Researchpy.GeneralizedLinearModel"
+                 solver_options=None, table_decimals=None, report_as="coef", display_summary=True, **kwargs):
         if data is None: data = {}
 
         #-------------------------------------------------#
@@ -36,7 +34,7 @@ class GeneralizedLinearModel(BaseModel):
         # If None or dict arrives here, we fall back to the SolverOptions dataclass defaults.
         self.SolverOptions = SolverOptions(
                 estimation_method="mle",
-                obj_function="ssr",
+                obj_function="log-likelihood",
                 algorithm="IRLS",
                 tol=1e-7,
                 tolerance=1e-4,
@@ -61,6 +59,24 @@ class GeneralizedLinearModel(BaseModel):
         super().__init__(formula=formula, data=data, conf_level=conf_level, family=family, link=link,
                          solver_options=self.SolverOptions, table_decimals=table_decimals)
 
+        self.__name__ = "Researchpy.GeneralizedLinearModel"
+
+
+        if type(self).__name__ == self.__class__.__name__:
+
+            # -- Fit the model
+            self.fit()
+
+            # -- Compute standard errors and statistics
+            self._compute_statistics()
+
+            # -- Build ModelResults (results() sets self.ModelResults internally)
+            self.results(report_as=report_as, return_type="Dataframe", pretty_format=True)
+
+            # Display the model results summary
+            if display_summary:
+                self.summary()
+
 
     def __initialize_betas(self, initial_betas=None, initial_betas_method=None):
 
@@ -74,8 +90,8 @@ class GeneralizedLinearModel(BaseModel):
                 raise ValueError(f"initial_betas must be a numpy array of shape ({self.k}, 1), but got {initial_betas.shape}")
 
         elif initial_betas_method.lower() == "ols":
-            #self._BaseModel__ols_fit()
             self.CoefResults.betas = _ols_estimation_principal(self.IV, self.DV)
+
 
         # Default initialization based on model type
         else:
@@ -115,11 +131,7 @@ class GeneralizedLinearModel(BaseModel):
         )
 
 
-    def fit(self):
-        self.logL = []
-        self.nfev = -1
-        converged = False
-
+    def fit(self, **kwargs):
         # Initialize betas if not already set (default is empty list from CoefResults)
         if not isinstance(self.CoefResults.betas, np.ndarray) or self.CoefResults.betas.size == 0:
             self.CoefResults.betas = np.zeros((self.k, 1))
@@ -159,7 +171,6 @@ class GeneralizedLinearModel(BaseModel):
         if result.success:
             self.CoefResults.betas = result.x.reshape(-1, 1)
             self.FitStatistics.log_likelihood = -result.fun
-            converged = True
 
             # Perform Likelihood Ratio Test (full model vs null)
             lr_test = LikelihoodRatioTest(self, store_null=True, display_summary=False)
@@ -192,13 +203,58 @@ class GeneralizedLinearModel(BaseModel):
 
             self.FitStatistics.additional_stats = {
                 "n_iterations": result.nfev,
-                "converged": converged or (self.FitStatistics.log_likelihood is not None and len(self.FitStatistics.log_likelihood) > 0),
+                "converged": result.success or (self.FitStatistics.log_likelihood is not None and len(self.FitStatistics.log_likelihood) > 0),
                 "log_likelihood_null": ll_null,
             }
 
         else:
             if self.SolverOptions.display:
                 print(f"Warning: {self.SolverOptions.estimation_method} using {self.SolverOptions.algorithm} did not converge ({result.message})")
+
+
+    def _compute_statistics(self):
+        """
+        Compute standard errors, Wald test statistics, p-values, and
+        confidence intervals using the GLM Fisher information matrix.
+
+        Uses the Family instance from ModelDesignSpec to compute working
+        weights generically across distribution families.
+
+        Notes
+        -----
+        Covariance matrix: Cov(β) = φ · (X'WX)^{-1}
+        where W = diag(working_weights) and φ is the dispersion parameter
+        (φ = 1 for binomial and Poisson; estimated for Gaussian/Gamma).
+
+        Wald statistic: z = β / SE(β)  [or t for models with estimated dispersion]
+        """
+        from scipy.stats import norm, t as t_dist
+
+        family = self.ModelDesignSpec.family
+        eta = self.IV @ self.CoefResults.betas       # linear predictor
+        w = family.working_weights(eta).reshape(-1, 1)  # GLM working weights
+        X_w = self.IV * w
+
+        # Fisher information: X'WX; covariance = phi * (X'WX)^{-1}
+        dispersion = getattr(self, '_dispersion', 1.0)
+        try:
+            cov_matrix = dispersion * np.linalg.inv(self.IV.T @ X_w)
+        except np.linalg.LinAlgError:
+            cov_matrix = dispersion * np.linalg.pinv(self.IV.T @ X_w)
+
+        self.CoefResults.std_error = np.sqrt(np.diag(cov_matrix)).reshape(-1, 1)
+
+        # Wald test statistics
+        self.CoefResults.test_stat = self.CoefResults.betas / self.CoefResults.std_error
+
+        # P-values: z-test for known dispersion, t-test for estimated
+        if self._test_stat_name == "t":
+            dof = self.n - self.k
+            self.CoefResults.test_pval = 2 * t_dist.sf(np.abs(self.CoefResults.test_stat), df=dof)
+            self._confidence_interval(distribution_name="t", dof=dof)
+        else:
+            self.CoefResults.test_pval = 2 * norm.sf(np.abs(self.CoefResults.test_stat))
+            self._confidence_interval(distribution_name="normal")
 
 
     def predict(self, estimate=None, trans=None, decimals=4, **kwargs):
@@ -252,10 +308,19 @@ class GeneralizedLinearModel(BaseModel):
 
     def _get_from_child(self, **kwargs):
 
-        raise NotImplementedError(
-                f"{type(self).__name__} must override _get_ModelResults() "
-                "to provide self.ModelResults."
-        )
+
+        if type(self).__name__ == self.__class__.__name__:
+            # -- Simple model table: Model name + Log likelihood
+            return {"": [self._get_model_display_name(),
+                         f"Distribution family = {self.ModelDesignSpec.family.name}",
+                         f"Link function = {self.ModelDesignSpec.family.link}",
+                         f"Log likelihood = {self.FitStatistics.log_likelihood:.4f}"]}
+
+        else:
+            raise NotImplementedError(
+                    f"{type(self).__name__} must override _get_ModelResults() "
+                    "to provide self.ModelResults."
+            )
 
 
     def _get_coefficient_results(self, na_rep='', pretty_format=True, table_decimals=None,
@@ -320,72 +385,102 @@ class GeneralizedLinearModel(BaseModel):
         # Build the fit statistics and coefficient results
         fit_statistics = self._get_fit_statistics(table_decimals=self._table_decimals)
 
-        #table_from_child = self._get_from_child("additional_fit_stats", fit_statistics=fit_statistics)
         table_from_child = self._get_from_child(key="model_table")
 
         coefficients = self._get_coefficient_results(pretty_format=pretty_format,
                                                      table_decimals=self._table_decimals,
                                                      coef_transform=coef_transform)
 
-        self.ModelResults = ModelResults(
-            model_name=self._get_model_display_name(),
-            fit_statistics=fit_statistics,
-            model_table=None,  # MLE models have no SS decomposition
-            coefficients=coefficients,
-        )
 
         self.ModelResults = ModelResults(
             model_name=self._get_model_display_name(),
             fit_statistics=fit_statistics,
-            model_table=table_from_child,  # MLE models have no SS decomposition
+            model_table=table_from_child,
             coefficients=coefficients,
         )
 
         return self.ModelResults
 
 
-    def _get_results(self, return_type="Dataframe", pretty_format=True,
-                     table_decimals=None, coef_transform=None):
+    def results(self, report_as="coef", return_type="Dataframe", pretty_format=True,
+                table_decimals=None, **kwargs
+                ):
         """
-        Return the regression results.
+        Return the logistic regression results as a ``ModelResults`` dataclass.
 
         Parameters
         ----------
+        report_as : str, optional
+            ``"or"`` for odds ratios (default), ``"coef"`` for raw log-odds.
         return_type : str, optional
-            Format of the returned results. Either ``"Dataframe"`` or
-            ``"Dictionary"``. Default is ``"Dataframe"``.
+            ``"Dataframe"`` (default) or ``"Dictionary"``.
         pretty_format : bool, optional
             Whether to format the output for display. Default is True.
         table_decimals : dict, optional
             Dictionary specifying decimal places for different statistics.
-        coef_transform : callable or None
-            Transformation function for coefficients and CIs (e.g., ``np.exp``).
 
         Returns
         -------
-        tuple
-            If return_type is "Dataframe": (fit_statistics_df, None, coefficients_df)
-            If return_type is "Dictionary": (fit_statistics_dict, None, coefficients_dict)
+        ModelResults
+            A dataclass with fields:
+            - ``model_name``: ``"Logistic Regression"``
+            - ``fit_statistics``: Combined fit statistics (DataFrame or dict)
+            - ``model_table``: ``None`` (MLE-based model, no SS decomposition)
+            - ``coefficients``: Coefficient / odds ratio table (DataFrame or dict)
+            - ``details``: ``None``
+
+            Supports tuple unpacking::
+
+                name, fit_stats, model_table, coefs, details = model.results()
+
+            Or attribute access::
+
+                result = model.results()
+                result.fit_statistics
+                result.coefficients
         """
         if table_decimals is not None:
             self._table_decimals = self._table_decimals | table_decimals
 
+        # Determine the coefficient transform based on report_as
+        if report_as.lower() in ["or", "odds ratio", "odds_ratio"]:
+            transform = np.exp
+            self._beta_type = "odds ratio"
+        else:
+            transform = None
+            self._beta_type = "coef"
+
+        # Use the new GeneralizedLinearModel flow to build ModelResults
         mr = self._get_ModelResults(return_type=return_type,
                                     pretty_format=pretty_format,
                                     table_decimals=self._table_decimals,
-                                    coef_transform=coef_transform)
+                                    coef_transform=transform
+                                    )
 
+        # Rename "Coef." column to "Odds Ratio" if reporting odds ratios
+        if self._beta_type == "odds ratio":
+            if return_type.lower() in ["dataframe", "df", "pandas.dataframe", "pd.dataframe"]:
+                coef_df = self.ModelResults.as_dataframe("coefficients", mr.coefficients)
 
-        if return_type.lower() in ["dataframe", "df", "pandas.dataframe", "pd.dataframe"]:
-            if mr.model_table is None:
-                return (
-                    self.ModelResults.as_dataframe("fit_statistics", mr.fit_statistics),
-                    None,
+                if "Coef." in coef_df.columns:
+                    coef_df = coef_df.rename(columns={"Coef.": "Odds Ratio"})
+
+                self.ModelResults.coefficients = coef_df
+
+            elif isinstance(mr.coefficients, dict) and "Coef." in mr.coefficients:
+                self.ModelResults.coefficients = {
+                    ('Odds Ratio' if k == 'Coef.' else k): v
+                    for k, v in mr.coefficients.items()
+                }
+
+        if return_type.lower() in ["dataframe", "df", "pandas.dataframe", "pd.dataframe", ]:
+            return (self.ModelResults.as_dataframe("fit_statistics", mr.fit_statistics),
+                    self.ModelResults.as_dataframe("model_table", mr.model_table),
                     self.ModelResults.as_dataframe("coefficients", mr.coefficients)
-                )
+                    )
 
         else:
-            return mr.fit_statistics, None, mr.coefficients
+            return mr.fit_statistics, mr.model_table, mr.coefficients
 
 
     #---------------------------------------------------------------------------#
@@ -395,14 +490,51 @@ class GeneralizedLinearModel(BaseModel):
         """
         Build the left side of the summary header for generalized models.
 
-        Shows model name and log-likelihood value.
+        Shows model name, distribution family, link function, and log-likelihood value.
+
+        Parameters
+        ----------
+        width : int
+            Available character width.
+        model_summary_df : DataFrame or None
+            Summary DataFrame from ``self.results()``.
 
         Returns
         -------
         list of str
             Lines for the left side of the header.
         """
+        import pandas as pd
+
+        # Resolve the table to render: prefer the explicit argument,
+        # then ModelResults.fit_statistics, then hardcoded fallback.
+        table = None
+
+        if model_summary_df is not None:
+            if not isinstance(model_summary_df, pd.DataFrame):
+                table = pd.DataFrame.from_dict(model_summary_df)
+            else:
+                table = model_summary_df.copy()
+
+        elif hasattr(self, 'ModelResults') and self.ModelResults.model_table is not None:
+            table = self.ModelResults.as_dataframe("model_table", self.ModelResults.model_table)
+
+        if table is not None:
+            desc_lines = table.to_string(
+                    header=False,
+                    index=False,
+                    justify="right"
+            ).split("\n")
+            return desc_lines
+
+        # Fallback: build from  ModelDesignSpec and FitStatistics
         lines = [self._get_model_display_name()]
+
+        if self.ModelDesignSpec.family.name is not None:
+            lines.append(f"Distribution family = {self.ModelDesignSpec.family.name}")
+
+        if self.ModelDesignSpec.family.link is not None:
+            lines.append(f"Link function = {self.ModelDesignSpec.family.link}")
 
         if self.FitStatistics.log_likelihood is not None:
             lines.append(f"Log likelihood = {self.FitStatistics.log_likelihood:.4f}")
@@ -435,25 +567,26 @@ class GeneralizedLinearModel(BaseModel):
         """
         import pandas as pd
 
+        # Resolve the table to render: prefer the explicit argument,
+        # then ModelResults.fit_statistics, then hardcoded fallback.
+        table = None
+
         if descriptives_df is not None:
-            # Convert to index-oriented for to_string.
-            if self.ModelResults.fit_statistics is not None:
-                table = self.ModelResults.as_dataframe("fit_statistics", self.ModelResults.fit_statistics)
-        else:
             if not isinstance(descriptives_df, pd.DataFrame):
                 table = pd.DataFrame.from_dict(descriptives_df)
             else:
                 table = descriptives_df.copy()
 
+        elif hasattr(self, 'ModelResults') and self.ModelResults.fit_statistics is not None:
+            table = self.ModelResults.as_dataframe("fit_statistics", self.ModelResults.fit_statistics)
 
+        if table is not None:
             desc_lines = table.to_string(
                 header=False,
                 index=False,
                 justify="right"
             ).split("\n")
-
             return desc_lines
-
 
         # Fallback: build from FitStatistics dataclass
         lines = [f"Number of obs = {self.n:>8}"]
@@ -463,6 +596,9 @@ class GeneralizedLinearModel(BaseModel):
 
         if self.FitStatistics.test_pval is not None:
             lines.append(f"Prob > chi2   = {self.FitStatistics.test_pval:>8.4f}")
+
+        if self.FitStatistics.r_squared_pseudo is not None:
+            lines.append(f"Pseudo R2     = {self.FitStatistics.r_squared_pseudo:>8.4f}")
 
         n_iter = self.FitStatistics.additional_stats.get("n_iterations") if self.FitStatistics.additional_stats else None
         if n_iter is not None:

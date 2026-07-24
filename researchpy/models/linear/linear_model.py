@@ -2,6 +2,7 @@ from typing import Any
 from pandas import DataFrame
 
 from researchpy.models.base import BaseModel
+from researchpy.optimize import _ols_estimation_principal as ols_estimation_principal
 from researchpy.containers import ModelResults, FactorEffects, SolverOptions
 from researchpy.utility import *
 
@@ -32,8 +33,7 @@ class LinearModel(BaseModel):
 
 
         # OLS fit to compute the coefficients (betas) — stored in self.CoefResults.betas
-        #self._CoreModel__ols_fit()
-        self._BaseModel__ols_fit()
+        self.fit()
 
         # Compute the model sum of squares, degrees of freedom, mean squares, F-value, p-value,
         # and effect size measures — stored in self.ModelEffects
@@ -43,10 +43,8 @@ class LinearModel(BaseModel):
         self.__compute_beta_se_and_stats()
 
 
-    def fit(self, estimation_principal=None, **kwargs):
-        ...
-
-
+    def fit(self, **kwargs):
+        self.CoefResults.betas = ols_estimation_principal(self.IV, self.DV)
 
 
     def __compute_beta_se_and_stats(self):

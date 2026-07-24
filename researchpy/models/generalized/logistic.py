@@ -1,6 +1,3 @@
-from scipy.stats import norm
-from scipy.special import expit
-
 from researchpy.models.generalized.general_model import GeneralizedLinearModel
 from researchpy.containers import ModelResults, SolverOptions
 from researchpy.utility import *
@@ -88,7 +85,6 @@ class LogisticRegression(GeneralizedLinearModel):
         self.__name__ = "Researchpy.LogisticRegression"
 
         # Initializing betas
-        #self._GeneralModel__initialize_betas(initial_betas=initial_betas, initial_betas_method=initial_betas_method)
         self._GeneralizedLinearModel__initialize_betas(initial_betas=initial_betas, initial_betas_method=initial_betas_method)
 
         # Fit the model
@@ -149,27 +145,6 @@ class LogisticRegression(GeneralizedLinearModel):
         #return super()._get_from_child(key, **kwargs)
 
 
-    def _compute_statistics(self):
-        """Compute standard errors, test statistics, and p-values."""
-        linear_pred = self.IV @ self.CoefResults.betas
-        p = expit(linear_pred)
-        w = p * (1 - p).reshape(-1, 1)
-        X_w = self.IV * w
-
-        # Covariance matrix (inverse of Fisher information)
-        try:
-            cov_matrix = np.linalg.inv(self.IV.T @ X_w)
-        except np.linalg.LinAlgError:
-            cov_matrix = np.linalg.pinv(self.IV.T @ X_w)
-
-        self.CoefResults.std_error = np.sqrt(np.diag(cov_matrix)).reshape(-1, 1)
-
-        # Wald z-statistics and p-values
-        self.CoefResults.test_stat = self.CoefResults.betas / self.CoefResults.std_error
-        self.CoefResults.test_pval = 2 * norm.sf(np.abs(self.CoefResults.test_stat))
-
-        # Compute confidence intervals
-        self._confidence_interval()
 
 
 
@@ -374,9 +349,6 @@ class LogisticRegression(GeneralizedLinearModel):
 
 
         # Returning the classification table as the "model_table" component of ModelResults for logistic regression
-        #classification_table, classification_stats = self.classification_table(return_type="Dictionary")
-        #self.ModelResults.model_table = (classification_table, classification_stats)
-
         classification_table, classification_stats = self.classification_table(return_type="Dictionary")
         self.ModelResults.details = {"Classification table": classification_table,
                                      "Classification stats": classification_stats}
@@ -399,19 +371,6 @@ class LogisticRegression(GeneralizedLinearModel):
                 }
 
 
-        '''
-        if return_type.lower() in ["dataframe", "df", "pandas.dataframe", "pd.dataframe", ]:
-            classification_table = pd.DataFrame(classification_table).set_index("Classified")
-            classification_stats = pd.DataFrame(classification_stats)
-
-            return (self.ModelResults.as_dataframe("fit_statistics", mr.fit_statistics),
-                    (classification_table, classification_stats),
-                    self.ModelResults.as_dataframe("coefficients", mr.coefficients) )
-
-        else:
-            return mr.fit_statistics, (classification_table, classification_stats), mr.coefficients
-        '''
-
         if return_type.lower() in ["dataframe", "df", "pandas.dataframe", "pd.dataframe", ]:
             return (self.ModelResults.as_dataframe("fit_statistics", mr.fit_statistics),
                     self.ModelResults.as_dataframe("model_table", mr.model_table),
@@ -422,66 +381,6 @@ class LogisticRegression(GeneralizedLinearModel):
 
 
 
-    #--------------------------------------------------------------------#
-    #                           Summary Methods                          #
-    #--------------------------------------------------------------------#
-    def _summary_header_right(self, width=78, descriptives_df=None):
-        """
-        Build the right side of the summary header for generalized models.
-
-        When *descriptives_df* is provided the values are read from that
-        DataFrame via ``to_string(header=False)`` so the summary is driven
-        entirely by the DataFrames returned from ``self.results()``.
-
-        Otherwise falls back to rendering from ``self`` attributes directly.
-
-        Parameters
-        ----------
-        width : int
-            Available character width.
-        descriptives_df : DataFrame or None
-            Descriptives DataFrame from ``self.results()`` (index-oriented:
-            stat names as index, values in column 0).
-
-        Returns
-        -------
-        list of str
-            Lines for the right side of the header.
-        """
-        if descriptives_df is not None:
-            # Convert to index-oriented for to_string.
-            if self.ModelResults.fit_statistics is not None:
-                table = self.ModelResults.as_dataframe("fit_statistics", self.ModelResults.fit_statistics)
-        else:
-            if not isinstance(descriptives_df, pd.DataFrame):
-                table = pd.DataFrame.from_dict(descriptives_df)
-            else:
-                table = descriptives_df.copy()
-
-
-            desc_lines = table.to_string(
-                header=False,
-                index=False,
-                justify="right"
-            ).split("\n")
-
-            return desc_lines
-
-
-        # Fallback: build from FitStatistics dataclass
-        lines = [f"Number of obs = {self.n:>8}"]
-
-        if self.FitStatistics.test_stat is not None and self.FitStatistics.df_model is not None:
-            lines.append(f"LR chi2({int(self.FitStatistics.df_model)})    = {self.FitStatistics.test_stat:>8.4f}")
-
-        if self.FitStatistics.test_pval is not None:
-            lines.append(f"Prob > chi2   = {self.FitStatistics.test_pval:>8.4f}")
-
-        n_iter = self.FitStatistics.additional_stats.get("n_iterations") if self.FitStatistics.additional_stats else None
-        if n_iter is not None:
-            lines.append(f"N iterations  = {n_iter:>8}")
-
-        return lines
 
 
 # Convenience alias

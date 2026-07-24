@@ -19,13 +19,14 @@ Usage:
 import numpy as np
 
 from researchpy.models.families import Family
+from researchpy.containers import SolverOptions
 
 
 def neg_log_likelihood(params: object,
                        IV: object,
                        DV: object,
-                       solver_options: object,
-                       family: Family = None,
+                       solver_options: SolverOptions,
+                       family: Family,
                        tracker: object = None
                        ):
     """Negative log-likelihood function for scipy.optimize.
@@ -44,8 +45,7 @@ def neg_log_likelihood(params: object,
     solver_options : SolverOptions object
         A SolverOptions dataclass instance containing regularization and display settings.
     family : Family
-        A ``researchpy.models.families.Family`` instance that provides
-        ``link_inverse`` and ``log_likelihood`` methods.
+        A ``researchpy.models.families.Family`` instance that provides ``link_inverse`` and ``log_likelihood`` methods.
     tracker : OptimizationTracker object, or None
         Optional tracker for monitoring optimization progress.
 
@@ -57,7 +57,7 @@ def neg_log_likelihood(params: object,
     Raises
     ------
     ValueError
-        If ``family`` is not provided.
+        If required parameters are not provided or of wrong type.
     """
     if family is None:
         raise ValueError(
@@ -75,12 +75,13 @@ def neg_log_likelihood(params: object,
     ll = -family.log_likelihood(DV, mu)
 
     # Add regularization if specified
-    if solver_options.regularization == "l2":
-        # Don't regularize intercept (first coefficient)
-        ll += solver_options.alpha * np.sum(params[1:] ** 2)
+    if hasattr(solver_options, "regularization") and solver_options.get("regularization") is not None:
+        if solver_options.regularization == "l2":
+            # Don't regularize intercept (first coefficient)
+            ll += solver_options.alpha * np.sum(params[1:] ** 2)
 
-    elif solver_options.regularization == "l1":
-        ll += solver_options.alpha * np.sum(np.abs(params[1:]))
+        elif solver_options.regularization == "l1":
+            ll += solver_options.alpha * np.sum(np.abs(params[1:]))
 
     # Store the log-likelihood value in the tracker if provided
     if tracker is not None:

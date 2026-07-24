@@ -1,10 +1,11 @@
 from researchpy.core.matrix_design import DesignMatrix
-from researchpy.containers.multivariable import ModelDesignSpec
 
 from researchpy.utility import *
 from researchpy.models.postestimation.predict import predict
 from researchpy.models.families import get_family
-from researchpy.containers import FitStatistics, ModelEffects, CoefResults, ModelDesignSpec
+from researchpy.containers import (
+    SolverOptions, FitStatistics, ModelEffects, CoefResults, ModelDesignSpec,
+)
 
 from researchpy.optimize.solvers import _ols_estimation_principal
 from researchpy.statistics import _confidence_interval

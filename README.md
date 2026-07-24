@@ -107,4 +107,4 @@ print(researchpy.__version__)
 
 Current citation with version number:
 
-> Bryant, C. (2018–2026). *researchpy* (Version 0.3.8) [Python package]. https://github.com/Corey-Bryant/researchpy
+> Bryant, C. (2018–2026). *researchpy* (Version 0.3.7.2) [Python package]. https://github.com/Corey-Bryant/researchpy

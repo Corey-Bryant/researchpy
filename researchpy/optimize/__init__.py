@@ -14,14 +14,14 @@ Usage:
 
 from researchpy.optimize.objective_functions import (
     neg_log_likelihood,
-    gradient_neg_log_likelihood
+    gradient_neg_log_likelihood,
 )
 from researchpy.optimize.algorithms import (
     IRLS,
 )
 
 from researchpy.optimize.solvers import (
-    _ols_estimation_principal, _mle_estimation_principal
+   _ols_estimation_principal, _lstsq_estimation_principal, _mle_estimation_principal,
 )
 
 from researchpy.optimize.trackers import OptimizationTracker
@@ -31,6 +31,7 @@ __all__ = [
     "neg_log_likelihood",
     "gradient_neg_log_likelihood",
     "_ols_estimation_principal",
+    "_lstsq_estimation_principal",
     "_mle_estimation_principal",
     "IRLS",
     "OptimizationTracker",

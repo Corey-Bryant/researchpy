@@ -77,7 +77,6 @@ class Regress(LinearModel):
 
         super().__init__(formula=formula, data=data, conf_level=conf_level, table_decimals=table_decimals)
 
-        #self.__name__ = "Researchpy.Regress"
         self.ModelDesignSpec.model = self.__name__
         self.ModelDesignSpec.model_display_name = self._get_model_display_name()
 
@@ -96,9 +95,15 @@ class Regress(LinearModel):
 
         Parameters
         ----------
+        include_test_stat_p : bool, optional
+            Whether to include p-values for test statistics in the results. Default is False.
+        include_effect_sizes : bool, optional
+            Whether to include effect sizes in the results. Default is True.
         return_type : str, optional
             Format of the returned results. Either "Dataframe" or "Dictionary".
             Default is "Dataframe".
+        na_rep : object
+            Representation for missing values in the results. Default is an empty string.
         pretty_format : bool, optional
             Whether to format the output for display. Default is True.
         table_decimals : dict, optional
@@ -129,6 +134,7 @@ class Regress(LinearModel):
                                   include_effect_sizes=include_effect_sizes,
                                   factor_effects=False,
                                   return_type=return_type,
+                                  na_rep=na_rep,
                                   pretty_format=pretty_format,
                                   table_decimals=table_decimals)
 

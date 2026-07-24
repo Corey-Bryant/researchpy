@@ -1,34 +1,63 @@
 from typing import Any
 
-import numpy as np
+from numpy import asarray, ndarray, linalg
 from scipy.optimize import minimize, OptimizeResult
 
 
 
-def _ols_estimation_principal(IV: np.ndarray, DV: np.ndarray) -> np.ndarray:
+def _ols_estimation_principal(IV: ndarray, DV: ndarray) -> ndarray:
     """
-    Perform Ordinary Least Squares (OLS) regression to estimate coefficients.
+    Perform Ordinary Least-Squares (OLS) regression using the normal equation to estimate coefficients.
 
     Parameters
     ----------
-    IV : np.ndarray
+    IV : ndarray
         The design matrix (independent variables).
-    DV : np.ndarray
+    DV : ndarray
         The response vector (dependent variable).
 
     Returns
     -------
-    np.ndarray
+    ndarray
         Estimated coefficients (betas) for the regression model.
     """
     # Calculate the OLS coefficients using the normal equation
     try:
-        betas = np.linalg.inv((np.asarray(IV.T) @ np.asarray(IV))) @ np.asarray(IV.T) @ np.asarray(DV)
+        betas = linalg.inv((asarray(IV.T) @ asarray(IV))) @ asarray(IV.T) @ asarray(DV)
+
     except:
-        betas = np.linalg.pinv((np.asarray(IV.T) @ np.asarray(IV))) @ np.asarray(IV.T) @ np.asarray(DV)
+        betas = linalg.pinv((asarray(IV.T) @ asarray(IV))) @ asarray(IV.T) @ asarray(DV)
 
     return betas
 
+
+
+def _lstsq_estimation_principal(IV: ndarray, DV: ndarray) -> ndarray:
+    """
+    Perform Least-Squares (LSTSQ) regression using numpy.linalg.lstsq to estimate coefficients, with fallback
+    to pseudo-inverse if necessary.
+
+    Parameters
+    ----------
+    IV : ndarray
+        The design matrix (independent variables).
+    DV : ndarray
+        The response vector (dependent variable).
+
+    Returns
+    -------
+    ndarray
+        Estimated coefficients (betas) for the regression model.
+    """
+    # Calculate the LSTSQ coefficients using numpy.linalg.lstsq, with fallback to normal equation using
+    # pseudo-inverse if necessary.
+    try:
+        betas, _, _, _ = linalg.lstsq((asarray(IV.T) @ asarray(IV)), asarray(IV))
+
+    except:
+        betas = linalg.pinv((asarray(IV.T) @ asarray(IV))) @ asarray(IV.T) @ asarray(DV)
+
+    return betas
 
 
 

@@ -6,8 +6,9 @@ This module provides the LikelihoodRatioTest class for comparing nested models
 using the likelihood ratio test statistic.
 """
 
-import numpy as np
-import pandas as pd
+from numpy import (
+    ones, array,
+)
 from scipy.stats import chi2
 
 from researchpy.containers import TestResults, FitStatistics
@@ -159,7 +160,7 @@ class LikelihoodRatioTest:
         self.FitStatistics.n = self.model.n
 
         # Create intercept-only design matrix
-        IV_null = np.ones((self.FitStatistics.n, 1))
+        IV_null = ones((self.FitStatistics.n, 1))
 
         # Smart initialization via Family
         intercept_init = family.initial_intercept(DV)
@@ -174,7 +175,7 @@ class LikelihoodRatioTest:
 
         null_result = _mle_estimation_principal(
                 fun=lambda p, *a: 0,  # Placeholder; IRLS ignores fun
-                x0=np.array([intercept_init]),
+                x0=array([intercept_init]),
                 method=IRLS,
                 options=options
         )

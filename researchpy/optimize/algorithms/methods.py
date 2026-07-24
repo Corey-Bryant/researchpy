@@ -1,10 +1,23 @@
-import numpy as np
+# -*- coding: utf-8 -*-
+"""
+Iteratively Reweighted Least-Squares (IRLS) solver.
+
+This module provides a generic IRLS solver for fitting Generalized Linear Models (GLMs) using the
+scipy.optimize.minimize interface via researchpy.optimize._mle_estimation_principal. It is designed to work with any
+GLM family (e.g., Binomial, Poisson, Gaussian) by leveraging the family-specific methods for link functions.
+"""
+from numpy import (
+    atleast_1d, asarray, ndarray,
+    sqrt, clip, sum, nan, inf,
+    linalg,
+)
+from scipy.optimize import OptimizeResult
 
 
 
 
-def IRLS(fun, x0, args=(), **options):
-    """Generic Iteratively Reweighted Least Squares (IRLS) solver.
+def IRLS(fun: object, x0: object, args: object = (), **options: object) -> OptimizeResult:
+    """Generic Iteratively Reweighted Least-Squares (IRLS) solver.
 
     This function conforms to the ``scipy.optimize.minimize`` custom-method
     callable signature so it can be passed directly as the *method* argument::
@@ -30,7 +43,7 @@ def IRLS(fun, x0, args=(), **options):
     fun : callable
         Objective function (unused by IRLS, but required by the
         ``scipy.optimize.minimize`` custom-method API).
-    x0 : np.ndarray
+    x0 : ndarray
         Initial parameter estimates, shape ``(k,)``.
     args : tuple
         Extra positional arguments (unused, kept for API conformance).
@@ -44,10 +57,10 @@ def IRLS(fun, x0, args=(), **options):
             ``log_likelihood``.  **Required.**
 
             .. note:: Also accepted under the key ``"family"``.
-        IV : np.ndarray
+        IV : ndarray
             Design matrix (independent variables), shape ``(n, k)``.
             **Required.**
-        DV : np.ndarray
+        DV : ndarray
             Response vector (dependent variable), shape ``(n, 1)``
             or ``(n,)``.  **Required.**
         maxiter : int, optional
@@ -92,13 +105,13 @@ def IRLS(fun, x0, args=(), **options):
     >>> from researchpy.models.families import BinomialFamily
     >>> result = minimize(
     ...     fun=lambda p, *a: 0,   # placeholder; IRLS ignores fun
-    ...     x0=np.zeros(k),
+    ...     x0=zeros(k),
     ...     method=IRLS,
     ...     options={"family": BinomialFamily(), "IV": X, "DV": y}
     ... )
     >>> result.x   # fitted coefficients
     """
-    from scipy.optimize import OptimizeResult
+
 
     # ---- Unpack required options ----
     family = options.get("family")
@@ -120,14 +133,14 @@ def IRLS(fun, x0, args=(), **options):
 
 
     # ---- Ensure shapes ----
-    betas = np.atleast_1d(x0).astype(float).reshape(-1, 1)
-    DV = np.asarray(DV).reshape(-1, 1)
-    IV = np.asarray(IV)
+    betas = atleast_1d(x0).astype(float).reshape(-1, 1)
+    DV = asarray(DV).reshape(-1, 1)
+    IV = asarray(IV)
 
     n, k = IV.shape
     log_likelihood_history: list[float] = []
     converged = False
-    prev_deviance = np.inf
+    prev_deviance = inf
 
     for iteration in range(1, max_iter + 1):
         # Step 1: Linear predictor
@@ -140,28 +153,28 @@ def IRLS(fun, x0, args=(), **options):
         z = family.working_response(eta, DV)        # working response
 
         # Ensure w is a column vector for element-wise multiplication
-        w = np.asarray(w).reshape(-1, 1)
+        w = asarray(w).reshape(-1, 1)
 
 
         # Step 3: Weighted normal equations  (X'WX)β = X'Wz
         #   W is diagonal, so X'WX = X' diag(w) X = (X * sqrt(w))' (X * sqrt(w))
-        sqrt_w = np.sqrt(np.clip(w, 1e-15, None))
+        sqrt_w = sqrt(clip(w, 1e-15, None))
         IV_w = IV * sqrt_w                          # weighted design matrix
         z_w = z * sqrt_w                            # weighted response
         try:
             # Solve via Cholesky or least-squares for numerical stability
-            betas_new, _, _, _ = np.linalg.lstsq(IV_w, z_w, rcond=None)
+            betas_new, _, _, _ = linalg.lstsq(IV_w, z_w, rcond=None)
 
-        except np.linalg.LinAlgError:
+        except linalg.LinAlgError:
             # Fallback: pseudo-inverse
             XtWX = IV.T @ (IV * w)
             XtWz = IV.T @ (z * w)
-            betas_new = np.linalg.pinv(XtWX) @ XtWz
+            betas_new = linalg.pinv(XtWX) @ XtWz
 
 
         # Step 4: Convergence check via deviance
         mu_new = family.link_inverse(IV @ betas_new)
-        deviance = float(np.sum(family.deviance_residuals(DV, mu_new)))
+        deviance = float(sum(family.deviance_residuals(DV, mu_new)))
 
         ll = family.log_likelihood(DV, mu_new)
         log_likelihood_history.append(ll)
@@ -187,18 +200,17 @@ def IRLS(fun, x0, args=(), **options):
 
 
     # ---- Build scipy-compatible result ----
-    final_ll = log_likelihood_history[-1] if log_likelihood_history else np.nan
+    final_ll = log_likelihood_history[-1] if log_likelihood_history else nan
 
-    return OptimizeResult(
-        x=betas.ravel(),
-        success=converged,
-        fun=-final_ll,                  # negative log-likelihood (minimisation convention)
-        nit=iteration,
-        nfev=iteration,                 # IRLS has no separate "function evaluations"
-        message=(f"IRLS converged in {iteration} iterations."
-                 if converged
-                 else f"IRLS did not converge after {iteration} iterations."),
-        # Extra attributes for ResearchPy diagnostics
-        logL=log_likelihood_history,
-        deviance=deviance,
-    )
+    return OptimizeResult(x=betas.ravel(),
+                          success=converged,
+                          fun=-final_ll,                  # negative log-likelihood (minimisation convention)
+                          nit=iteration,
+                          nfev=iteration,                 # IRLS has no separate "function evaluations"
+                          message=(f"IRLS converged in {iteration} iterations."
+                                   if converged
+                                   else f"IRLS did not converge after {iteration} iterations."),
+                          # Extra attributes for ResearchPy diagnostics
+                          logL=log_likelihood_history,
+                          deviance=deviance,
+                          )

@@ -47,43 +47,6 @@ from researchpy.containers.base import CoreDataclass
 
 
 @dataclass
-class ModelFit(CoreDataclass):
-    """
-
-    Standardized container for model fit information.
-
-    The following attributes are defined:
-    - ``formula``: The model formula as a string (e.g., "y ~ x1 + x2").
-    - ``family``: The model family (e.g., "gaussian", "binomial").
-    - ``link``: The link function used in the model (e.g., "identity", "logit").
-    - ``n``: The number of observations used to fit the model.
-    - ``k``: The number of predictors (including intercept) in the model.
-    - ``ci_level``: The confidence interval level used for coefficient estimates (default is 0.95).
-    - ``dv``: A list of dependent variable names (optional).
-    - ``iv``: A list of independent variable names (optional).
-    - ``model_display_name``: A user-friendly name for the model (optional).
-    - ``model``: The internal name of the model (optional).
-
-    """
-
-    formula: Optional[str] = None
-    family: Optional[str] = None
-    model: Optional[str] = None
-    model_display_name: Optional[str] = None
-    link: Optional[str] = None
-    solver_method: Optional[str] = None
-    ci_level: Optional[float] = 0.95
-    dv_term_names: Optional[list] = None
-    iv_term_names: Optional[list] = None
-    additional_stats: Optional[dict] = field(default_factory=dict)
-
-    def __post_init__(self):
-        self.__name__ = "Researchpy.ModelFit"
-
-
-
-
-@dataclass
 class ModelDesignSpec(CoreDataclass):
     """
 
@@ -241,15 +204,21 @@ class SolverOptions(CoreDataclass):
         self.__name__ = "Researchpy.SolverOptions"
 
         # -- Setting default solver algorithm and objective_function options based on estimation method provided -- #
-        if self.estimation_method.lower() in ['maximum_likelihood', 'maximum likelihood estimation', 'mle']:
+        if self.estimation_method.lower() in ['maximum_likelihood', 'maximum likelihood estimation', 'mle', 'ml']:
             if self.algorithm is None: self.algorithm = 'IRLS'
             if self.obj_function is None: self.obj_function = 'log-likelihood'
             self.tol = 1e-4
             self.tolerance = 1e-4
             self.logtolerance = 0.0
 
-        elif self.estimation_method.lower() in ['ols', 'ordinary_least_squares', 'numeric', 'analytic']:
-            if self.algorithm is None: self.algorithm = 'numeric'
+        elif self.estimation_method.lower() in ['ols', 'ordinary least-squares',]:
+            if self.algorithm is None:
+                self.algorithm = 'ols'
+            if self.obj_function is None: self.obj_function = 'ssr'
+
+        elif self.estimation_method.lower() in ['lstsq', 'least-squares', 'least squares']:
+            if self.algorithm is None:
+                self.algorithm = 'lstsq'
             if self.obj_function is None: self.obj_function = 'ssr'
 
         else:
@@ -276,6 +245,7 @@ class SolverOptions(CoreDataclass):
         filtered = {k: v for k, v in d.items() if k in valid_keys}
         return cls(**filtered)
 
+
     def with_overrides(self, overrides: dict) -> "SolverOptions":
         """Return a new SolverOptions with selected fields replaced.
 
@@ -296,6 +266,7 @@ class SolverOptions(CoreDataclass):
         valid_keys = {f.name for f in fields(self)}
         filtered = {k: v for k, v in overrides.items() if k in valid_keys}
         return _replace(self, **filtered)
+
 
     def to_scipy_options(self) -> dict:
         """Return a dict suitable for ``scipy.optimize.minimize(options=...)``.
