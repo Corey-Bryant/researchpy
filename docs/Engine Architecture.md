@@ -11,7 +11,7 @@
 ## Overview
 
 The `engine/` package implements a **three-layer pipeline** that serves as the universal foundation
-for every computation in researchpy — regression models, descriptive statistics (numerical and
+for every computation in researchpy. Regression models, descriptive statistics (numerical and
 categorical), inferential tests, and everything in between.
 
 ```
@@ -265,7 +265,7 @@ as_categorical("y ~ x + age", data=df)  # → "y ~ C(x) + age"  (if age is numer
 
 ### Validation
 
-- `_validate_columns(columns, data, label)` — checks all column names exist in the DataFrame,
+- `_validate_columns(columns, data, label)` checks all column names exist in the DataFrame,
   raises `ValueError` with available columns listed if any are missing.
 - Called for DV, IV, by, over, and all RHS formula variables.
 
