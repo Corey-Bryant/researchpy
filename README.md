@@ -80,6 +80,9 @@ rp.summary_cat(df["group"])
 - numpy ≥ 2.5.0
 - scipy ≥ 1.17.1
 - statsmodels ≥ 0.14.0
+- patsy ≥ 1.0.2 (for legacy formula parsing, will be removed in future versions)
+- requests ≥ 2.20.0
+- formulaic ≥ 1.2.2 (for new formula parsing)
 
 ## Documentation
 

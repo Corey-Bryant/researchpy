@@ -1,7 +1,4 @@
 import numpy as np
-import scipy.stats
-import patsy
-import pandas
 
 
 def predict_y(mdl_data, trans=None):
@@ -110,7 +107,7 @@ def studentized_residuals(mdl_data):
 
     resid_standardized = standardized_residuals(mdl_data)
     n = mdl_data.n
-    k = len(mdl_data._IV_design_info.column_names) - 1
+    k = mdl_data.k - 1
 
     for i in range(0, n):
 

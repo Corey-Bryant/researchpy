@@ -16,15 +16,13 @@ DEPRECATION NOTICE:
 """
 
 import warnings
-import numpy as np
+import numpy
 import scipy.stats
-import patsy
 import pandas
 
-from .summary import summarize
-from .model import model
-from .utility import *
-from .predict import predict
+from researchpy.model import model
+from researchpy.utility import *
+from researchpy.predict import predict
 
 
 class ols(model):
@@ -106,7 +104,6 @@ class ols(model):
         except:
             self.model_data["H"] = self.IV @ numpy.linalg.pinv(
                 self.IV.T @ self.IV) @ self.IV.T
-            #print(f"NOTE: Using pseudo-inverse, smallest eigenvalue is {} ")
 
         # Estimation of betas
         try:
@@ -159,18 +156,25 @@ class ols(model):
         ### F-values
         # Model
         self.model_data["f_value_model"] = float(self.model_data["msr"] / self.model_data["mse"])
-        self.model_data["f_p_value_model"] = scipy.stats.f.sf( self.model_data["f_value_model"], self.model_data["degrees_of_freedom_model"], self.model_data["degrees_of_freedom_residual"])
+        self.model_data["f_p_value_model"] = scipy.stats.f.sf(self.model_data["f_value_model"],
+                                                              self.model_data["degrees_of_freedom_model"],
+                                                              self.model_data["degrees_of_freedom_residual"])
 
         ### Effect Size Measures
         # Model
         self.model_data["r squared"] = (self.model_data["sum_of_square_model"] / self.model_data["sum_of_square_total"])
-        self.model_data["r squared adj."] = 1 - (self.model_data["degrees_of_freedom_total"] / self.model_data["degrees_of_freedom_residual"]) * (
-            self.model_data["sum_of_square_residual"] / self.model_data["sum_of_square_total"])
+        self.model_data["r squared adj."] = 1 - (
+                    self.model_data["degrees_of_freedom_total"] / self.model_data["degrees_of_freedom_residual"]) * (
+                                                    self.model_data["sum_of_square_residual"] / self.model_data[
+                                                "sum_of_square_total"])
         self.model_data["Eta squared"] = self.model_data["r squared"]
-        
-        self.model_data["Epsilon squared"] = (self.model_data["degrees_of_freedom_model"] * (self.model_data["msr"] - self.model_data["mse"])) / (self.model_data["sum_of_square_total"])
-        
-        self.model_data["Omega squared"] = (self.model_data["degrees_of_freedom_model"] * (self.model_data["msr"] - self.model_data["mse"])) / (self.model_data["sum_of_square_total"] + self.model_data["mse"])
+
+        self.model_data["Epsilon squared"] = (self.model_data["degrees_of_freedom_model"] * (
+                    self.model_data["msr"] - self.model_data["mse"])) / (self.model_data["sum_of_square_total"])
+
+        self.model_data["Omega squared"] = (self.model_data["degrees_of_freedom_model"] * (
+                    self.model_data["msr"] - self.model_data["mse"])) / (
+                                                       self.model_data["sum_of_square_total"] + self.model_data["mse"])
 
         ### Variance-covariance matrices
         # Non-robust - from Applied Linear Statistical Models, pg. 203
@@ -201,7 +205,10 @@ class ols(model):
         for beta, se in zip(self.model_data["betas"], standard_errors):
 
             try:
-                lower, upper = scipy.stats.t.interval(conf_level, self.model_data["degrees_of_freedom_residual"], loc=beta, scale=se)
+                lower, upper = scipy.stats.t.interval(conf_level,
+                                                      self.model_data["degrees_of_freedom_residual"],
+                                                      loc=beta,
+                                                      scale=se)
 
                 conf_int_lower.append(numpy.asarray(lower).item())
                 conf_int_upper.append(numpy.asarray(upper).item())
@@ -222,7 +229,7 @@ class ols(model):
 
             self._DV_design_info.term_names[0]: ["Coef.", "Std. Err.", "t", "p-value", "95% Conf. Interval"],
 
-            }
+        }
 
         regression_info = {self._DV_design_info.term_names[0]: [],
                            "Coef.": [],
@@ -248,105 +255,110 @@ class ols(model):
 
             descriptives = {
 
-                    "Number of obs = ": self.nobs,
-                    "Root MSE = ": round(self.model_data["root_mse"], decimals),
-                    "R-squared = ": round(self.model_data["r squared"], decimals),
-                    "Adj R-squared = ": round(self.model_data["r squared adj."], decimals)
+                "Number of obs = ": self.nobs,
+                "Root MSE = ": round(self.model_data["root_mse"], decimals),
+                "R-squared = ": round(self.model_data["r squared"], decimals),
+                "Adj R-squared = ": round(self.model_data["r squared adj."], decimals)
 
-                }
+            }
 
             top = {
 
-                    "Source": ["Model", ''],
-                    "Sum of Squares": [round(self.model_data["sum_of_square_model"], decimals), ''],
-                    "Degrees of Freedom": [round(self.model_data["degrees_of_freedom_model"], decimals), ''],
-                    "Mean Squares": [round(self.model_data["msr"], decimals), ''],
-                    "F value": [round(self.model_data["f_value_model"], decimals), ''],
-                    "p-value": [round(self.model_data["f_p_value_model"], decimals), ''],
-                    "Eta squared": [round(self.model_data["Eta squared"], decimals), ''],
-                    "Epsilon squared" : [round(self.model_data["Epsilon squared"], decimals), ''],
-                    "Omega squared": [round(self.model_data["Omega squared"], decimals), '']
+                "Source": ["Model", ''],
+                "Sum of Squares": [round(self.model_data["sum_of_square_model"], decimals), ''],
+                "Degrees of Freedom": [round(self.model_data["degrees_of_freedom_model"], decimals), ''],
+                "Mean Squares": [round(self.model_data["msr"], decimals), ''],
+                "F value": [round(self.model_data["f_value_model"], decimals), ''],
+                "p-value": [round(self.model_data["f_p_value_model"], decimals), ''],
+                "Eta squared": [round(self.model_data["Eta squared"], decimals), ''],
+                "Epsilon squared": [round(self.model_data["Epsilon squared"], decimals), ''],
+                "Omega squared": [round(self.model_data["Omega squared"], decimals), '']
 
-                    }
+            }
 
             bottom = {
 
-                    "Source": ["Residual", "Total"],
-                    "Sum of Squares": [round(self.model_data["sum_of_square_residual"], decimals), round(self.model_data["sum_of_square_total"], decimals)],
-                    "Degrees of Freedom": [round(self.model_data["degrees_of_freedom_residual"], decimals), round(self.model_data["degrees_of_freedom_total"], decimals)],
-                    "Mean Squares": [round(self.model_data["mse"], decimals), round(self.model_data["mst"], decimals)],
-                    "F value": ['', ''],
-                    "p-value": ['', ''],
-                    "Eta squared": ['', ''],
-                    "Epsilon squared" : ['', ''],
-                    "Omega squared": ['', '']
+                "Source": ["Residual", "Total"],
+                "Sum of Squares": [round(self.model_data["sum_of_square_residual"], decimals),
+                                   round(self.model_data["sum_of_square_total"], decimals)],
+                "Degrees of Freedom": [round(self.model_data["degrees_of_freedom_residual"], decimals),
+                                       round(self.model_data["degrees_of_freedom_total"], decimals)],
+                "Mean Squares": [round(self.model_data["mse"], decimals), round(self.model_data["mst"], decimals)],
+                "F value": ['', ''],
+                "p-value": ['', ''],
+                "Eta squared": ['', ''],
+                "Epsilon squared": ['', ''],
+                "Omega squared": ['', '']
 
-                    }
+            }
 
             results = {
 
-                    "Source": top["Source"] + bottom["Source"],
-                    "Sum of Squares": top["Sum of Squares"] + bottom["Sum of Squares"],
-                    "Degrees of Freedom": top["Degrees of Freedom"] + bottom["Degrees of Freedom"],
-                    "Mean Squares": top["Mean Squares"] + bottom["Mean Squares"],
-                    "F value": top["F value"] + bottom["F value"],
-                    "p-value": top["p-value"] + bottom["p-value"],
-                    "Eta squared": top["Eta squared"] + bottom["Eta squared"],
-                    "Epsilon squared" : top["Epsilon squared"] + bottom["Epsilon squared"],
-                    "Omega squared": top["Omega squared"] + bottom["Omega squared"]
+                "Source": top["Source"] + bottom["Source"],
+                "Sum of Squares": top["Sum of Squares"] + bottom["Sum of Squares"],
+                "Degrees of Freedom": top["Degrees of Freedom"] + bottom["Degrees of Freedom"],
+                "Mean Squares": top["Mean Squares"] + bottom["Mean Squares"],
+                "F value": top["F value"] + bottom["F value"],
+                "p-value": top["p-value"] + bottom["p-value"],
+                "Eta squared": top["Eta squared"] + bottom["Eta squared"],
+                "Epsilon squared": top["Epsilon squared"] + bottom["Epsilon squared"],
+                "Omega squared": top["Omega squared"] + bottom["Omega squared"]
 
-                    }
+            }
 
         else:
 
             descriptives = {
 
-                    "Number of obs = ": self.nobs,
-                    "Root MSE = ": round(self.model_data["root_mse"], decimals),
-                    "R-squared = ": round(self.model_data["r squared"], decimals),
-                    "Adj R-squared = ": round(self.model_data["r squared adj."], decimals)
+                "Number of obs = ": self.nobs,
+                "Root MSE = ": round(self.model_data["root_mse"], decimals),
+                "R-squared = ": round(self.model_data["r squared"], decimals),
+                "Adj R-squared = ": round(self.model_data["r squared adj."], decimals)
 
-                }
+            }
 
             top = {
 
-                    "Source": ["Model"],
-                    "Sum of Squares": [round(self.model_data["sum_of_square_model"], decimals)],
-                    "Degrees of Freedom": [round(self.model_data["degrees_of_freedom_model"], decimals)],
-                    "Mean Squares": [round(self.model_data["msr"], decimals)],
-                    "F value": [round(self.model_data["f_value_model"], decimals)],
-                    "p-value": [round(self.model_data["f_p_value_model"], decimals)]
+                "Source": ["Model"],
+                "Sum of Squares": [round(self.model_data["sum_of_square_model"], decimals)],
+                "Degrees of Freedom": [round(self.model_data["degrees_of_freedom_model"], decimals)],
+                "Mean Squares": [round(self.model_data["msr"], decimals)],
+                "F value": [round(self.model_data["f_value_model"], decimals)],
+                "p-value": [round(self.model_data["f_p_value_model"], decimals)]
 
-                    }
+            }
 
             bottom = {
 
-                    "Source": ["Residual", "Total"],
-                    "Sum of Squares": [round(self.model_data["sum_of_square_residual"], decimals), round(self.model_data["sum_of_square_total"], decimals)],
-                    "Degrees of Freedom": [round(self.model_data["degrees_of_freedom_residual"], decimals), round(self.model_data["degrees_of_freedom_total"], decimals)],
-                    "Mean Squares": [round(self.model_data["mse"], decimals), round(self.model_data["mst"], decimals)],
-                    "F value": [numpy.nan, numpy.nan],
-                    "p-value": [numpy.nan, numpy.nan]
+                "Source": ["Residual", "Total"],
+                "Sum of Squares": [round(self.model_data["sum_of_square_residual"], decimals),
+                                   round(self.model_data["sum_of_square_total"], decimals)],
+                "Degrees of Freedom": [round(self.model_data["degrees_of_freedom_residual"], decimals),
+                                       round(self.model_data["degrees_of_freedom_total"], decimals)],
+                "Mean Squares": [round(self.model_data["mse"], decimals), round(self.model_data["mst"], decimals)],
+                "F value": [numpy.nan, numpy.nan],
+                "p-value": [numpy.nan, numpy.nan]
 
-                    }
+            }
 
             results = {
 
-                    "Source": top["Source"] + bottom["Source"],
-                    "Sum of Squares": top["Sum of Squares"] + bottom["Sum of Squares"],
-                    "Degrees of Freedom": top["Degrees of Freedom"] + bottom["Degrees of Freedom"],
-                    "Mean Squares": top["Mean Squares"] + bottom["Mean Squares"],
-                    "F value": top["F value"] + bottom["F value"],
-                    "p-value": top["p-value"] + bottom["p-value"]
+                "Source": top["Source"] + bottom["Source"],
+                "Sum of Squares": top["Sum of Squares"] + bottom["Sum of Squares"],
+                "Degrees of Freedom": top["Degrees of Freedom"] + bottom["Degrees of Freedom"],
+                "Mean Squares": top["Mean Squares"] + bottom["Mean Squares"],
+                "F value": top["F value"] + bottom["F value"],
+                "p-value": top["p-value"] + bottom["p-value"]
 
-                    }
+            }
 
         if return_type == "Dataframe":
 
-            return (pandas.DataFrame.from_dict(descriptives, orient="index"), pandas.DataFrame.from_dict(results), pandas.DataFrame.from_dict(regression_info))
+            return (pandas.DataFrame.from_dict(descriptives, orient="index"), pandas.DataFrame.from_dict(results),
+                    pandas.DataFrame.from_dict(regression_info))
 
         elif return_type == "Dictionary":
-
+            #return (descriptives, results, regression_info)   # apart of Feature_SyntaxEngine
             return (descriptives, results, regression_info.to_dict())
 
         else:
@@ -356,6 +368,4 @@ class ols(model):
 
 
     def predict(self, estimate=None):
-        
-        return predict(self, estimate= estimate)
-
+        return predict(self, estimate=estimate)

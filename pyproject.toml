@@ -4,15 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "researchpy"
-version = "0.3.7.1"
+version = "0.3.7.2"
 authors = [ { name="Corey Bryant", email="ResearchPy.Official@proton.me" }]
 maintainers = [ {name="Corey Bryant", email="ResearchPy.Official@proton.me" }]
 description = "ResearchPy is a Python library for statistical analysis, designed to generate well-structured pandas DataFrame outputs for commonly used descriptive and inferential procedures. It emphasizes readable, publication-oriented results that support reproducible analysis workflows."
 readme = "README.md"
-license = "MIT"
+license = { file="LICENSE" }
 requires-python = ">=3.12"
 classifiers = [
     "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
 keywords = ["researchpy", "statistics"]
@@ -23,6 +24,7 @@ dependencies = [
     'statsmodels>=0.14.0',
     'patsy>=1.0.2',
     'requests>=2.20.0',
+    'formulaic>=1.2.2',
 ]
 
 
@@ -34,3 +36,8 @@ Repository = "https://github.com/researchpy/researchpy.git"
 [tool.setuptools]
 [tool.setuptools.packages.find]
 include = ["researchpy*"]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.4.4",
+]

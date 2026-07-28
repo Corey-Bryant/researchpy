@@ -13,18 +13,12 @@ DEPRECATION NOTICE:
     The new modular structure provides better organization and more functionality.
 """
 import warnings
-import numpy
-import scipy.stats
 import patsy
-import pandas
-
-from .summary import summarize
 from .utility import *
 
 
 class model():
     """
-
     This is the base -model- object for Researchpy. By default, missing
     observations are dropped from the data. -matrix_type- parameter determines
     which design matrix will be returned; value of 1 will return a design matrix
@@ -38,8 +32,6 @@ class model():
             # New way
             from researchpy.models import CoreModel
     """
-
-
     def __init__(self, formula_like, data = {}, matrix_type = 1):
         # Issue deprecation warning
         warnings.warn(
@@ -51,9 +43,6 @@ class model():
         )
         # matrix_type = 1 includes intercept
         # matrix_type = 0 does not include the intercept
-
-
-
         if matrix_type == 1:
             self.DV, self.IV = patsy.dmatrices(formula_like, data, 1)
         if matrix_type == 0:
@@ -68,6 +57,9 @@ class model():
 
         ## My design information ##
         self.DV_name = self.DV.design_info.term_names[0]
+        self._patsy_factor_information, self._mapping, self._rp_factor_information = variable_information(
+            self.IV.design_info.term_names,
+            self.IV.design_info.column_names,
+            data
+        )
 
-        self._patsy_factor_information, self._mapping, self._rp_factor_information  = variable_information(self.IV.design_info.term_names, self.IV.design_info.column_names, data)
-        
