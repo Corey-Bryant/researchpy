@@ -48,7 +48,7 @@ class LinearModel(BaseModel):
 
 
     def __compute_beta_se_and_stats(self):
-        variance_covariance_beta_matrix = self.__variance_covariance_beta_matrix(method="standard", to_return=True, add_to_self=False)
+        variance_covariance_beta_matrix = self.__variance_covariance_beta_matrix(method="standard",)
 
         ## Standard Errors
         self.CoefResults.std_error = np.sqrt(np.diag(variance_covariance_beta_matrix)).reshape(-1, 1)
@@ -66,21 +66,17 @@ class LinearModel(BaseModel):
 
 
 
-    def __variance_covariance_residual_matrix(self, method="standard", to_return=True, add_to_self=False):
+    def __variance_covariance_residual_matrix(self, method="standard",):
 
         if method == "standard":
-            H = self._hat_matrix(to_return=True)
-            I = self._identity_matrix(to_return=True)
+            H = self._hat_matrix()
+            I = self._identity_matrix()
             variance_covariance_residual_matrix = np.asarray(self.ModelEffects.mse * (I - H))
 
-        if add_to_self:
-            self.variance_covariance_residual_matrix = variance_covariance_residual_matrix
-
-        if to_return:
-            return variance_covariance_residual_matrix
+        return variance_covariance_residual_matrix
 
 
-    def __variance_covariance_beta_matrix(self, method="standard", to_return=True, add_to_self=False):
+    def __variance_covariance_beta_matrix(self, method="standard", ):
 
         if method == "standard":
             try:
@@ -88,11 +84,7 @@ class LinearModel(BaseModel):
             except np.linalg.LinAlgError:
                 variance_covariance_beta_matrix = np.asarray(self.ModelEffects.mse * np.linalg.pinv(self.IV.T @ self.IV))
 
-        if add_to_self:
-            self.variance_covariance_beta_matrix = variance_covariance_beta_matrix
-
-        if to_return:
-            return variance_covariance_beta_matrix
+        return variance_covariance_beta_matrix
 
 
     def __model_sum_of_square_stats(self) -> None:
@@ -100,7 +92,7 @@ class LinearModel(BaseModel):
         predicted_y = self.IV @ self.CoefResults.betas     # predicted y values
         residuals = self.DV - predicted_y                   # Calculation of residuals (error)
 
-        J = self._j_matrix(to_return=True)                  # Creating the J matrix
+        J = self._j_matrix()                  # Creating the J matrix
 
         ### Sum of Squares
         # Total sum of squares (SSTO)

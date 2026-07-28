@@ -80,12 +80,12 @@ class LogisticRegression(GeneralizedLinearModel):
 
 
         super().__init__(formula, data, conf_level=conf_level, family="binomial", link="logit",
-                         solver_options=self.SolverOptions, table_decimals=table_decimals)
+                         solver_options=self.SolverOptions, table_decimals=table_decimals, fit=False)
 
         self.__name__ = "Researchpy.LogisticRegression"
 
         # Initializing betas
-        self._GeneralizedLinearModel__initialize_betas(initial_betas=initial_betas, initial_betas_method=initial_betas_method)
+        self._initialize_betas(initial_betas=initial_betas, initial_betas_method=initial_betas_method)
 
         # Fit the model
         self.fit()

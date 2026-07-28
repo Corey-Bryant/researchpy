@@ -172,11 +172,14 @@ def grouped_statistic(data: pd.DataFrame,
 
     if stat_func == "count":
         result_values = counts
+
     elif stat_func == "sum":
         result_values = sums
+
     elif stat_func == "mean":
         with np.errstate(divide='ignore', invalid='ignore'):
             result_values = np.where(counts > 0, sums / counts, np.nan)
+
     elif stat_func == "variance":
         with np.errstate(divide='ignore', invalid='ignore'):
             means = np.where(counts > 0, sums / counts, 0.0)
@@ -185,6 +188,7 @@ def grouped_statistic(data: pd.DataFrame,
         ss = X_clean.T @ sq_devs
         with np.errstate(divide='ignore', invalid='ignore'):
             result_values = np.where(counts > 1, ss / (counts - 1), np.nan)
+
     elif stat_func == "sd":
         with np.errstate(divide='ignore', invalid='ignore'):
             means = np.where(counts > 0, sums / counts, 0.0)
@@ -194,6 +198,7 @@ def grouped_statistic(data: pd.DataFrame,
         with np.errstate(divide='ignore', invalid='ignore'):
             variance = np.where(counts > 1, ss / (counts - 1), np.nan)
         result_values = np.sqrt(variance)
+
     elif stat_func == "se":
         with np.errstate(divide='ignore', invalid='ignore'):
             means = np.where(counts > 0, sums / counts, 0.0)
@@ -203,6 +208,7 @@ def grouped_statistic(data: pd.DataFrame,
         with np.errstate(divide='ignore', invalid='ignore'):
             variance = np.where(counts > 1, ss / (counts - 1), np.nan)
             result_values = np.where(counts > 0, np.sqrt(variance) / np.sqrt(counts), np.nan)
+
     else:
         raise ValueError(
             f"Unknown stat_func '{stat_func}'. "

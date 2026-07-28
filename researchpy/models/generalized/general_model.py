@@ -24,7 +24,7 @@ class GeneralizedLinearModel(BaseModel):
     """
 
     def __init__(self, formula, data=None, conf_level=0.95, family="gaussian", link="identity",
-                 solver_options=None, table_decimals=None, report_as="coef", display_summary=True, **kwargs):
+                 solver_options=None, table_decimals=None, report_as="coef", fit=True, display_summary=True, **kwargs):
         if data is None: data = {}
 
         #-------------------------------------------------#
@@ -49,6 +49,12 @@ class GeneralizedLinearModel(BaseModel):
         elif isinstance(solver_options, dict):
             self.SolverOptions = self.SolverOptions.with_overrides(solver_options)
 
+
+        super().__init__(formula=formula, data=data, conf_level=conf_level, family=family, link=link,
+                         solver_options=self.SolverOptions, table_decimals=table_decimals)
+
+        self.__name__ = "Researchpy.GeneralizedLinearModel"
+
         #-------------------------------------------------------------------#
         # -- Initialize an optimization tracker instance for this model. -- #
         #-------------------------------------------------------------------#
@@ -56,14 +62,7 @@ class GeneralizedLinearModel(BaseModel):
         # store and monitor the optimization process.
         self._OptimizationTracker = OptimizationTracker()
 
-        super().__init__(formula=formula, data=data, conf_level=conf_level, family=family, link=link,
-                         solver_options=self.SolverOptions, table_decimals=table_decimals)
-
-        self.__name__ = "Researchpy.GeneralizedLinearModel"
-
-
-        if type(self).__name__ == self.__class__.__name__:
-
+        if fit:
             # -- Fit the model
             self.fit()
 
@@ -78,7 +77,7 @@ class GeneralizedLinearModel(BaseModel):
                 self.summary()
 
 
-    def __initialize_betas(self, initial_betas=None, initial_betas_method=None):
+    def _initialize_betas(self, initial_betas=None, initial_betas_method=None):
 
         if initial_betas is not None and initial_betas_method is not None:
             return("Warning: Both initial_betas and initial_betas_method were provided. Ignoring initial_betas_method and using provided initial_betas.")

@@ -7,7 +7,6 @@ from researchpy.containers import (
     SolverOptions, FitStatistics, ModelEffects, CoefResults, ModelDesignSpec,
 )
 
-from researchpy.optimize.solvers import _ols_estimation_principal
 from researchpy.statistics import _confidence_interval
 
 
@@ -28,11 +27,9 @@ class BaseModel(DesignMatrix):
 
     def __init__(self, formula, data={}, conf_level=0.95,
                  family="gaussian", link="identity",
-                 solver_options=None, table_decimals=None,
-                 include_intercept: bool = True, ensure_full_rank: bool = True, **kwargs, ):
-
-        self.__name__ = "Researchpy.BaseModel"
-        self._beta_type = "coef"
+                 solver_options: object = None, table_decimals=None,
+                 include_intercept: bool = True, ensure_full_rank: bool = True,
+                 **kwargs, ):
 
         if not hasattr(self, "SolverOptions"):
             raise NotImplementedError(
@@ -40,7 +37,15 @@ class BaseModel(DesignMatrix):
             )
 
 
-        super().__init__(formula, data, output="numpy", include_intercept=include_intercept, ensure_full_rank=ensure_full_rank)
+        self.__name__ = "Researchpy.BaseModel"
+        self._beta_type = "coef"
+        self.ModelDesignSpec = ModelDesignSpec()
+
+
+        super().__init__(formula, data, output="numpy", include_intercept=include_intercept,
+                         ensure_full_rank=ensure_full_rank, **kwargs, )
+
+
         """
         
         Parsing the formula and assigning formulaic.model_spec.ModelSpec, and researchpy.ModelTerms instances to self:
@@ -100,97 +105,6 @@ class BaseModel(DesignMatrix):
     #---------------------------------------------------------------------------#
     #                       Shared Computational Methods                        #
     # --------------------------------------------------------------------------#
-    def _hat_matrix(self, y=None, x=None, to_return=False, add_to_self=False):
-
-        if y is not None and x is not None:
-            try:
-                H = np.asarray(x) @ np.linalg.inv(np.asarray(x.T) @ np.asarray(x)) @ np.asarray(x.T)
-            except:
-                H = np.asarray(x) @ np.linalg.pinv(np.asarray(x.T) @ np.asarray(x)) @ np.asarray(x.T)
-
-        else:
-            try:
-                H = np.asarray(self.IV) @ np.linalg.inv(np.asarray(self.IV.T) @ np.asarray(self.IV)) @ np.asarray(self.IV.T)
-            except:
-                H = np.asarray(self.IV) @ np.linalg.pinv(np.asarray(self.IV.T) @ np.asarray(self.IV)) @ np.asarray(self.IV.T)
-
-
-        if add_to_self:
-            self.H = H
-
-        if to_return:
-            return H
-
-
-    def _j_matrix(self, n=None, to_return=False, add_to_self=False):
-
-        if n is None:
-            n = self.n
-
-        J = np.ones((n, n))
-
-        if add_to_self:
-            self.J = J
-
-        if to_return:
-            return J
-
-
-    def _identity_matrix(self, n=None, to_return=False, add_to_self=False):
-
-        if n is None:
-            n = self.n
-
-        I = np.identity(n)
-
-        if add_to_self:
-            self.I = I
-
-        if to_return:
-            return I
-
-
-
-    def _eigenval_matrix(self, x=None, to_return=False, add_to_self=False):
-
-        if x is None:
-            x = self.IV
-
-        # Eigenvalues
-        eigvals = np.linalg.eigvals(np.asarray(x.T) @ np.asarray(x))
-
-        if add_to_self:
-            self.eigvals = np.asarray(eigvals)
-
-        if to_return:
-            return np.asarray(eigvals)
-
-
-    def __ols_fit(self, y=None, x=None, to_return=False, add_to_self=False):
-
-        if y is None: y = self.DV
-        if x is None: x = self.IV
-
-        # Eigenvalues
-        eigvals = self._eigenval_matrix(to_return=True)
-
-        # Estimation of betas
-        try:
-            betas = np.linalg.inv((np.asarray(x.T) @ np.asarray(x))) @ np.asarray(x.T) @ np.asarray(y)
-        except:
-            betas = np.linalg.pinv((np.asarray(x.T) @ np.asarray(x))) @ np.asarray(x.T) @ np.asarray(y)
-
-        # Store in CoefResults dataclass
-        self.CoefResults.betas = betas
-
-        if add_to_self:
-            self.betas = betas
-
-
-        if to_return:
-            return betas
-
-
     def fit(self, estimation_principal=None, **kwargs):
         raise NotImplementedError(
             f"{type(self).__name__} must override fit()."
@@ -813,3 +727,28 @@ class BaseModel(DesignMatrix):
         return _f
 
 
+
+    # ------------------------------------------------------------------ #
+    #  Container protocol                                                #
+    # ------------------------------------------------------------------ #
+    def info(self):
+        lines = [f"{self.__class__.__name__}("]
+        for k, v in self.ModelDesignSpec.__dict__.items():
+            if v is None or v == '' or v == {}:
+                pass
+
+            else:
+                if k == "model_terms":
+                    lines.append(f"{k}:" + " {")
+                    for kk in v.keys():
+                        lines.append(f"{kk}: {v[kk].info()},")
+                    lines.append("}")
+
+                elif k in ['ci_level', 'family', 'link', 'solver_options', 'solver_method']:
+                    lines.append(f"{k}:")
+                    lines.append(f"\t{v}, ")
+
+        return "\n".join(lines)
+
+    def __repr__(self):
+        return self.info()

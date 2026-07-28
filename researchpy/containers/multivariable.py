@@ -131,8 +131,6 @@ class ModelDesignSpec(CoreDataclass):
                    )
 
 
-
-
 @dataclass
 class SolverOptions(CoreDataclass):
     """
@@ -845,6 +843,13 @@ class Term(CoreDataclass):
         return mapping
 
 
+    def info(self):
+        lines = [f"Term({self.term} → {self.name}  "]
+        lines.append(f"(factor={self.is_factor}, intx={self.is_interaction}, "
+                     f"reference={self.reference}, cols={len(self.columns)})")
+        return "".join(lines)
+
+
 
 @dataclass
 class ModelTerms(CoreDataclass):
@@ -884,7 +889,6 @@ class ModelTerms(CoreDataclass):
     """
 
     terms: list = field(default_factory=list)   # list[Term]
-    #dv: Optional[list] = None                   # list[str] — dependent variable names
 
 
     def __post_init__(self):
@@ -937,11 +941,11 @@ class ModelTerms(CoreDataclass):
         >>> mt[1].is_factor
         [True, True]
         """
-        if "~" not in formula:
-            raise ValueError(
-                f"Formula must contain '~' separating dependent and independent "
-                f"variables. Got: '{formula}'. Example: 'y ~ C(x)'."
-            )
+        #if "~" not in formula:
+        #    raise ValueError(
+        #        f"Formula must contain '~' separating dependent and independent "
+        #        f"variables. Got: '{formula}'. Example: 'y ~ C(x)'."
+        #    )
 
         parsed = formulaic.Formula(formula)
 
@@ -1227,7 +1231,7 @@ class ModelTerms(CoreDataclass):
 
 
     # ------------------------------------------------------------------ #
-    #  Container protocol                                                  #
+    #  Container protocol                                                #
     # ------------------------------------------------------------------ #
     def __getitem__(self, key):
         """
@@ -1252,10 +1256,10 @@ class ModelTerms(CoreDataclass):
     def info(self):
         lines = [f"ModelTerms({len(self.terms)} terms)"]
         for t in self.terms:
-            lines.append(f"  {t.term!r} → {t.name!r}  "
+            lines.append(f"{t.term!r} → {t.name!r}  "
                          f"(factor={t.is_factor}, intx={t.is_interaction}, "
-                         f"cols={len(t.columns)})"
-                         )
+                         f"reference={t.reference}, columns={t.columns})")
+
         return "\n".join(lines)
 
     def __repr__(self):
