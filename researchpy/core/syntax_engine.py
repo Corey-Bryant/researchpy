@@ -269,7 +269,7 @@ class SyntaxSpec(CoreDataclass):
         if dv is not None:
             if resolved_data is None:
                 raise ValueError(
-                    "When using keyword arguments (dv=, by=, iv=), 'data' must be provided."
+                    "When using keyword arguments (dv=, iv=, by=, over=), 'data' must be provided."
                 )
 
             _validate_columns(dv, resolved_data, "dv")
@@ -408,90 +408,6 @@ class SyntaxSpec(CoreDataclass):
 
 
 
-    # ------------------------------------------------------------------
-    # Reverse mapping: spec → formula string
-    # ------------------------------------------------------------------
-
-    def to_formula(self) -> str:
-        """Generate a Wilkinson-style formula string from the spec parameters.
-
-        Reconstructs the formula using the mapping:
-            - iv (marginal)        → ``dv ~ C(x) + C(k)``
-            - by (cell means)      → ``dv ~ C(x)`` or ``dv ~ C(x):C(k)``
-            - by + over (pivot)    → ``dv ~ C(by)*C(over)``
-            - no grouping          → ``dv`` (no RHS)
-
-        When multiple DVs are present, only the first is used on the LHS
-        (consistent with standard formula notation).
-
-        Returns
-        -------
-        str
-            The generated formula string.
-
-        Raises
-        ------
-        ValueError
-            If the spec has no DV columns to build a formula from.
-
-        Examples
-        --------
-        >>> spec = SyntaxSpec(dv=['y'], by=['group'])
-        >>> spec.to_formula()
-        'y ~ C(group)'
-
-        >>> spec = SyntaxSpec(dv=['y'], iv=['x', 'k'])
-        >>> spec.to_formula()
-        'y ~ C(x) + C(k)'
-
-        >>> spec = SyntaxSpec(dv=['y'], by=['x'], over=['k'])
-        >>> spec.to_formula()
-        'y ~ C(x)*C(k)'
-
-        >>> spec = SyntaxSpec(dv=['y'], by=['x', 'k'])
-        >>> spec.to_formula()
-        'y ~ C(x):C(k)'
-        """
-        if not self.dv:
-            raise ValueError(
-                "Cannot generate formula: no dependent variable (dv) specified."
-            )
-
-        # LHS: use first DV (standard formula convention)
-        lhs = self.dv[0]
-
-        # --- Build RHS based on which parameters are populated ---
-
-        # Pivot layout: by + over → star expansion
-        if self.by is not None and self.over is not None:
-            by_terms = [f"C({var})" for var in self.by]
-            over_terms = [f"C({var})" for var in self.over]
-            # Star connects all row and column factors
-            all_terms = by_terms + over_terms
-            rhs = "*".join(all_terms)
-            return f"{lhs} ~ {rhs}"
-
-        # Marginal: iv → plus-separated main effects
-        if self.iv is not None:
-            rhs_parts = [f"C({var})" for var in self.iv]
-            rhs = " + ".join(rhs_parts)
-            return f"{lhs} ~ {rhs}"
-
-        # Cell means: by → colon-separated if multiple, single C() if one
-        if self.by is not None:
-            if len(self.by) == 1:
-                rhs = f"C({self.by[0]})"
-            else:
-                rhs = ":".join(f"C({var})" for var in self.by)
-            return f"{lhs} ~ {rhs}"
-
-        # No grouping — formula is just the DV
-        return lhs
-
-
-
-
-
 def resolve(arg1: Any = None, arg2: Any = None, /, *,
             dv: Optional[Union[str, List[str]]] = None,
             iv: Optional[Union[str, List[str]]] = None,
@@ -614,6 +530,9 @@ def _extract_group_column(groupby_obj: Any, key: str) -> Optional[Any]:
     return None
 
 
+# _parse_formula shouldn't force as_factor (i.e. C(term)), it should just parse the formulaic.Formula as is
+#  Create 2 new methods: (1) that converts all rhs variables to continuous (i.e. checks/strips "C()" from around term
+#                        (2) that converts all rhs variables to categorical (i.e. wraps "C()" around term if not already wrapped)
 def _parse_formula(formula: str, data: pd.DataFrame, weights: Optional[str] = None, cls: type = None,) -> SyntaxSpec:
     """Parse a formula string into a SyntaxSpec using formulaic's parser.
 

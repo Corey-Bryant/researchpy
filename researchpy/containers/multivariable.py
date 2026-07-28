@@ -131,6 +131,29 @@ class ModelDesignSpec(CoreDataclass):
                    )
 
 
+    @staticmethod
+    def from_formula(formula: str, data: object, output: str = "numpy",
+                     include_intercept: bool = True, ensure_full_rank: bool = True, **kwargs,):
+
+        """Build from a formulaic model_matrix call."""
+        if not include_intercept:
+            formula = formula + " + 0"
+
+        mm = Formula(formula,
+                     _parser=DefaultFormulaParser(include_intercept=include_intercept),
+                     **kwargs,
+                     ).get_model_matrix(data, output=output, ensure_full_rank=ensure_full_rank, **kwargs)
+
+
+        # Extract what we need
+        DV = mm.lhs                                                   # Maintains a formuliac.model_spec.ModelSpec
+        IV = mm.rhs                                                   # Maintains a formuliac.model_spec.ModelSpec
+        model_terms = {"dv": ModelTerms.from_model_spec(mm.lhs.model_spec),
+                       "iv": ModelTerms.from_model_spec(mm.rhs.model_spec)}
+
+        return DV, IV, model_terms
+
+
 @dataclass
 class SolverOptions(CoreDataclass):
     """
@@ -696,8 +719,6 @@ class Term(CoreDataclass):
     columns_cleaned: Optional[list] = field(default_factory=list)
     levels: Optional[Union[list, None]] = None
     reference: Optional[Union[str, list, None]] = None
-    #term_map: Optional[dict] = field(default_factory=dict)
-    #term_column_map: Optional[dict] = field(default_factory=dict)
 
     def __post_init__(self):
         self._parts = self.term.split(":")
@@ -705,11 +726,11 @@ class Term(CoreDataclass):
         self.is_interaction = self._resolve_is_interaction()
         self.is_factor = self._resolve_is_factor()
         # If columns were provided but not yet cleaned, clean them
-        if self.columns and not self.columns_cleaned:
+        if self.columns and len(self.columns_cleaned) < len(self.columns):
             self.columns_cleaned = [self._clean_column(c) for c in self.columns]
 
 
-    # ------------------------------------------------------------------ #
+        # ------------------------------------------------------------------ #
     #  Resolve helpers                                                     #
     # ------------------------------------------------------------------ #
     def _resolve_is_interaction(self) -> bool:
@@ -758,7 +779,8 @@ class Term(CoreDataclass):
         ``"disease"``                                  →  ``"disease"``
         ``"Intercept"``                                →  ``"Intercept"``
         """
-        level_pattern = re.compile(r'(?<=\[..)(.*?)(?=\])')
+        #level_pattern = re.compile(r'(?<=\[..)(.*?)(?=\])')
+        level_pattern = re.compile(r'\[(?:[A-Z]+\.)?(.*?)\]')
 
         parts = column.split(":")
         cleaned = []
@@ -768,6 +790,7 @@ class Term(CoreDataclass):
                 cleaned.append(match[0] if match else part)
             else:
                 cleaned.append(part)
+
         return ":".join(cleaned)
 
 
@@ -951,32 +974,41 @@ class ModelTerms(CoreDataclass):
 
         # --- Extract DV names from LHS ---
         dv_names = []
-        for lhs_term in parsed.lhs:
-            for factor in lhs_term.factors:
-                factor_str = str(factor)
-                if factor_str != "1":
-                    dv_names.append(factor_str)
+        if parsed.lhs:
+            for lhs_term in parsed.lhs:
+                for factor in lhs_term.factors:
+                    factor_str = str(factor)
+                    if factor_str != "1":
+                        dv_names.append(factor_str)
 
         # --- Build Term objects from RHS ---
         terms = []
-        for rhs_term in parsed.rhs:
-            # Build the term string from factors
-            factors_strs = [str(f) for f in rhs_term.factors]
+        if parsed.rhs:
+            for rhs_term in parsed.rhs:
+                # Build the term string from factors
+                factors_strs = [str(f) for f in rhs_term.factors]
 
-            # Skip intercept (factor is "1") unless requested
-            if factors_strs == ["1"]:
-                if include_intercept:
-                    terms.append(Term(_term=1, term="Intercept"))
-                continue
+                # Skip intercept (factor is "1") unless requested
+                if factors_strs == ["1"]:
+                    if include_intercept:
+                        terms.append(Term(_term=1, term="Intercept"))
+                    continue
 
-            # Build the term string: "C(x):C(k)" or "z"
-            term_str = ":".join(factors_strs)
+                # Build the term string: "C(x):C(k)" or "z"
+                term_str = ":".join(factors_strs)
 
-            # Term.__post_init__ handles: name, is_interaction, is_factor
-            term_obj = Term(_term=term_str, term=term_str)
-            terms.append(term_obj)
+                # Term.__post_init__ handles: name, is_interaction, is_factor
+                term_obj = Term(_term=term_str, term=term_str)
+                terms.append(term_obj)
 
-        return cls(terms=terms, dv=dv_names)
+
+        if not parsed.lhs and parsed.rhs:
+            # If no LHS is provided, treat the first RHS term as the DV
+            first_term = terms.pop(0)
+            dv_names.append(first_term.term)
+
+        #return cls(terms=terms, dv=dv_names)
+        return cls(terms=terms)
 
 
     @classmethod
@@ -1022,6 +1054,7 @@ class ModelTerms(CoreDataclass):
 
             # Build the Term (columns_cleaned is computed in __post_init__)
             term_obj = Term(_term=encoded_term.term, term=term_str, columns=t_columns)
+
 
             # Determine levels and reference for factor terms
             # Get sub-parts of the term (for interactions like "C(group):C(drug)")
@@ -1108,7 +1141,6 @@ class ModelTerms(CoreDataclass):
         Note: These are the names of the terms in the model formula, while the column names are the names of the columns in the design matrix.
         """
         return {t.term: t.name for t in self.terms}
-        #return {t._term_map() for t in self.terms}
 
     @property
     def columns(self) -> list:
@@ -1216,7 +1248,8 @@ class ModelTerms(CoreDataclass):
         ``"disease"``                                  →  ``"disease"``
         ``"Intercept"``                                →  ``"Intercept"``
         """
-        level_pattern = re.compile(r'(?<=\[..)(.*?)(?=\])')
+        #level_pattern = re.compile(r'(?<=\[..)(.*?)(?=\])')
+        level_pattern = re.compile(r'\[(?:[A-Z]+\.)?(.*?)\]')
 
         parts = column.split(":")
         cleaned = []

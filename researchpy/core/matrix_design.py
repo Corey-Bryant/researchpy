@@ -20,21 +20,9 @@ class DesignMatrix():
 
         self.__name__ = "Researchpy.DesignMatrix"
 
-        """Build from a formulaic model_matrix call."""
-        if not include_intercept:
-            formula = formula + " + 0"
-
-        mm = Formula(formula,
-                     _parser=DefaultFormulaParser(include_intercept=include_intercept),
-                     **kwargs,
-                     ).get_model_matrix(data, output=output, ensure_full_rank=ensure_full_rank, **kwargs)
-
-
-        # Extract what we need
-        self.DV = mm.lhs                                                   # Maintains a formuliac.model_spec.ModelSpec
-        self.IV = mm.rhs                                                   # Maintains a formuliac.model_spec.ModelSpec
-        self.model_terms = {"dv": ModelTerms.from_model_spec(mm.lhs.model_spec),
-                            "iv": ModelTerms.from_model_spec(mm.rhs.model_spec)}
+        self.DV, self.IV, self.model_terms = self.from_formula(formula=formula, data=data, output=output,
+                                                               include_intercept=include_intercept,
+                                                               ensure_full_rank=ensure_full_rank, **kwargs)
 
 
     #---------------------------------------------------#
@@ -86,3 +74,16 @@ class DesignMatrix():
     def _eigenval_matrix(self,):
         return np.asanyarray(np.linalg.eigvals(np.asarray(self.IV.T) @ np.asarray(self.IV)))
 
+
+
+
+    def info(self):
+        lines = [f"{self.__class__.__name__}("]
+        lines.append(f"DV: {type(self.DV)} shape({self.DV.shape})")
+        lines.append(f"IV: {type(self.IV)} shape({self.IV.shape})")
+        lines.append(f"model_terms: {self.model_terms}")
+        lines.append(")")
+        return "\n".join(lines)
+
+    def __repr__(self):
+        return self.info()
