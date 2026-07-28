@@ -1,8 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Jul 15 08:07:51 2021
+Analysis of Variance (ANOVA)
 
-@author: Corey
+This module provides the anova class for conducting analysis of variance
+using sum of squares types I, II, and III.
+
+DEPRECATION NOTICE:
+    The `anova` class in this module is maintained for backward compatibility with v0.3.7.
+    It will be deprecated in a future version (v0.4.0) -> switch to `Anova` (alias `ANOVA`).
+    New code should use the new modular structure available in the current version v0.3.7.1, and will be the future standard.
 """
 
 # %% Importing libraries
@@ -73,9 +79,9 @@ class anova(ols):
     def __init__(self, formula_like, data={}, sum_of_squares=3):
         # Issue deprecation warning
         warnings.warn(
-            "The 'anova' class is deprecated and will be removed in a future version. "
-            "Please use 'Anova' from researchpy.models.multivariable instead: "
-            "from researchpy.models.multivariable import Anova. "
+            "The `anova` class is deprecated and will be removed in a future version (v0.4.0) -> switch to `Anova` (alias `ANOVA`)."
+            "Please use `Anova` (alias `ANOVA`) from researchpy.models.linear instead: "
+            "from researchpy.models import Anova. "
             "See documentation for migration guide.",
             DeprecationWarning,
             stacklevel=2

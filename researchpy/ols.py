@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Ordinary Least Squares (OLS) Regression
 
@@ -6,12 +7,12 @@ using the ordinary least squares method.
 
 DEPRECATION NOTICE:
     The `ols` class in this module is maintained for backward compatibility with v0.3.7.
-    It will be deprecated in a future version. New code should use the new modular
-    structure once available in v0.3.8.
+    It will be deprecated in a future version (v0.4.0) -> switch to `Regress` (alias `LM`).
+    New code should use the new modular structure available in the current version v0.3.7.1, and will be the future standard.
+
 
     The `decimals` parameter in the `results()` method is deprecated and is being renamed
     to `table_decimals` in a future version for better clarity and consistency.
-
 """
 
 import warnings
@@ -76,8 +77,9 @@ class ols(model):
     def __init__(self, formula_like, data={}):
         # Issue deprecation warning
         warnings.warn(
-            "The 'ols' class is deprecated and will be removed in a future version. "
-            "A new modular regression interface will be available in v0.3.8. "
+            "The `ols` class is deprecated and will be removed in a future version (v0.4.0) -> switch to `Regress` (alias `LM`)."
+            "Please use `Regress` (alias `LM`) from researchpy.models.linear instead: "
+            "from researchpy.models import Regress. "
             "See documentation for migration guide.",
             DeprecationWarning,
             stacklevel=2
