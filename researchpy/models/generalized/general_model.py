@@ -8,7 +8,7 @@ from researchpy.models.postestimation import (
 )
 from researchpy.optimize import (
     OptimizationTracker,
-    _ols_estimation_principal, _mle_estimation_principal,
+    ols_estimation_principal, mle_estimation_principal,
     neg_log_likelihood, gradient_neg_log_likelihood,
     IRLS,
 )
@@ -89,7 +89,7 @@ class GeneralizedLinearModel(BaseModel):
                 raise ValueError(f"initial_betas must be a numpy array of shape ({self.k}, 1), but got {initial_betas.shape}")
 
         elif initial_betas_method.lower() == "ols":
-            self.CoefResults.betas = _ols_estimation_principal(self.IV, self.DV)
+            self.CoefResults.betas = ols_estimation_principal(self.IV, self.DV)
 
 
         # Default initialization based on model type
@@ -148,22 +148,17 @@ class GeneralizedLinearModel(BaseModel):
                                                                "DV": self.DV,
                                                                "display": self.SolverOptions.display,}
 
-            result = _mle_estimation_principal(lambda p, *a: 0,
-                                               x0=self.CoefResults.betas.flatten(),
-                                               method=IRLS,
-                                               callback=None,
-                                               options=options,
-                                               )
+            result = mle_estimation_principal(lambda p, *a: 0, x0=self.CoefResults.betas.flatten(), method=IRLS,
+                                              callback=None, options=options
+                                              )
 
         else:
             #if self.SolverOptions.algorithm == "newton-raphson": self.SolverOptions.algorithm = 'Newton-CG'
-            result = _mle_estimation_principal(fun=self._neg_log_likelihood,
-                                               x0=self.CoefResults.betas.flatten(),
-                                               jac=self._gradient_neg_log_likelihood,
-                                               method=self.SolverOptions.algorithm,
-                                               callback=None,
-                                               options=self.SolverOptions.to_scipy_options(),
-                                               )
+            result = mle_estimation_principal(fun=self._neg_log_likelihood, x0=self.CoefResults.betas.flatten(),
+                                              jac=self._gradient_neg_log_likelihood,
+                                              method=self.SolverOptions.algorithm, callback=None,
+                                              options=self.SolverOptions.to_scipy_options()
+                                              )
 
 
         # -- Evaluating if the optimization converged and storing results accordingly. -- #

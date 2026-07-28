@@ -17,53 +17,12 @@ Public API:
     summarize()        - Unified dispatcher for computing summary statistics
 """
 
-from .observation import n_obs, n_missing, percent_missing
-from .central_tendency import mean, median, mode, quartiles, percentile, iqr
-from .dispersion import variance, standard_deviation, standard_error, value_range, coefficient_of_variation
-from .intervals import confidence_interval
-from .shape import skewness, kurtosis
-from .categorical import n_unique, value_counts, proportions, cumulative_proportions, tabulate
-from ._dispatcher import estable
 from ._estimation_interval import _confidence_interval
-from .describe import describe
 
 
 
 
 __all__ = [
-    # Observation
-    "n_obs",
-    "n_missing",
-    "percent_missing",
-    # Central tendency
-    "mean",
-    "median",
-    "mode",
-    "quartiles",
-    "percentile",
-    "iqr",
-    # Dispersion
-    "variance",
-    "standard_deviation",
-    "standard_error",
-    "value_range",
-    "coefficient_of_variation",
-    # Intervals
-    "confidence_interval",
     "_confidence_interval",
-    # Shape
-    "skewness",
-    "kurtosis",
-    # Categorical
-    "n_unique",
-    "value_counts",
-    "proportions",
-    "cumulative_proportions",
-    "tabulate",
-    # Result container
-    # Dispatcher
-    "estable",
-    # Comprehensive descriptive stats
-    "describe",
 ]
 

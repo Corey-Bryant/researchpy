@@ -12,7 +12,7 @@ Usage:
 
 """
 
-from researchpy.optimize.algorithms.methods import (
+from researchpy.optimize.algorithms.iteratively_reweighted_least_squares import (
     IRLS,
 )
 

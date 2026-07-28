@@ -7,7 +7,7 @@ models.
 
 """
 
-from researchpy.optimize.objective_functions.likelihood import (
+from researchpy.optimize.objective_functions.negative_log_likelihood import (
     neg_log_likelihood,
     gradient_neg_log_likelihood,
 )

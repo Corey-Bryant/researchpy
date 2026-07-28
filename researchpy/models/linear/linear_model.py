@@ -2,7 +2,7 @@ from typing import Any
 from pandas import DataFrame
 
 from researchpy.models.base import BaseModel
-from researchpy.optimize import _ols_estimation_principal as ols_estimation_principal
+from researchpy.optimize import ols_estimation_principal as ols_estimation_principal
 from researchpy.containers import ModelResults, FactorEffects, SolverOptions
 from researchpy.utility import *
 

@@ -5,7 +5,7 @@ from scipy.optimize import minimize, OptimizeResult
 
 
 
-def _ols_estimation_principal(IV: ndarray, DV: ndarray) -> ndarray:
+def ols_estimation_principal(IV: ndarray, DV: ndarray) -> ndarray:
     """
     Perform Ordinary Least-Squares (OLS) regression using the normal equation to estimate coefficients.
 
@@ -32,7 +32,7 @@ def _ols_estimation_principal(IV: ndarray, DV: ndarray) -> ndarray:
 
 
 
-def _lstsq_estimation_principal(IV: ndarray, DV: ndarray) -> ndarray:
+def lstsq_estimation_principal(IV: ndarray, DV: ndarray) -> ndarray:
     """
     Perform Least-Squares (LSTSQ) regression using numpy.linalg.lstsq to estimate coefficients, with fallback
     to pseudo-inverse if necessary.
@@ -61,8 +61,8 @@ def _lstsq_estimation_principal(IV: ndarray, DV: ndarray) -> ndarray:
 
 
 
-def _mle_estimation_principal(fun: object, x0: object, args: object = (), jac: object = None, method: object = None,
-                              callback: object = None, options: object = None, ) -> OptimizeResult:
+def mle_estimation_principal(fun: object, x0: object, args: object = (), jac: object = None, method: object = None,
+                             callback: object = None, options: object = None, ) -> OptimizeResult:
     """Perform Maximum Likelihood Estimation (MLE) using a specified optimization method.
 
     This is a wrapper around ``scipy.optimize.minimize`` that allows for flexible optimization of the likelihood function.

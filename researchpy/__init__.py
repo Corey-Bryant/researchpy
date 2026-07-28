@@ -90,9 +90,5 @@ __all__ = [
     "GLM", "GeneralizedLinearModel", "Logistic", "LogisticRegression",
 
     # Statistics subpackage
-    "n_obs", "n_missing", "percent_missing", "mean", "median", "mode",
-    "quartiles", "percentile", "iqr", "variance", "standard_deviation",
-    "standard_error", "coefficient_of_variation",
-    "skewness", "n_unique", "value_counts", "proportions",
-    "cumulative_proportions", "tabulate", "estable", "describe",
+    "_confidence_interval"
 ]

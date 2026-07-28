@@ -21,7 +21,7 @@ from researchpy.optimize.algorithms import (
 )
 
 from researchpy.optimize.solvers import (
-   _ols_estimation_principal, _lstsq_estimation_principal, _mle_estimation_principal,
+    ols_estimation_principal, lstsq_estimation_principal, mle_estimation_principal,
 )
 
 from researchpy.optimize.trackers import OptimizationTracker
@@ -30,9 +30,9 @@ from researchpy.optimize.trackers import OptimizationTracker
 __all__ = [
     "neg_log_likelihood",
     "gradient_neg_log_likelihood",
-    "_ols_estimation_principal",
-    "_lstsq_estimation_principal",
-    "_mle_estimation_principal",
+    "ols_estimation_principal",
+    "lstsq_estimation_principal",
+    "mle_estimation_principal",
     "IRLS",
     "OptimizationTracker",
 ]

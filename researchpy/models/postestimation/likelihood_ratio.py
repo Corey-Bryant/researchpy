@@ -13,7 +13,7 @@ from scipy.stats import chi2
 
 from researchpy.containers import TestResults, FitStatistics
 from researchpy.optimize import (
-    IRLS, _mle_estimation_principal,
+    IRLS, mle_estimation_principal,
 )
 
 
@@ -173,12 +173,9 @@ class LikelihoodRatioTest:
                                                                  "display": False,
                                                                  }
 
-        null_result = _mle_estimation_principal(
-                fun=lambda p, *a: 0,  # Placeholder; IRLS ignores fun
-                x0=array([intercept_init]),
-                method=IRLS,
-                options=options
-        )
+        null_result = mle_estimation_principal(fun=lambda p, *a: 0, x0=array([intercept_init]), method=IRLS,
+                                               options=options
+                                               )
 
         self.FitStatistics.log_likelihood_restricted = -null_result.fun
         self.FitStatistics.n_iterations = null_result.nit
