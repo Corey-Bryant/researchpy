@@ -86,72 +86,10 @@ class ModelDesignSpec(CoreDataclass):
     additional_stats: Optional[dict] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
 
-
     def __post_init__(self):
         self.__name__ = "Researchpy.ModelDesignSpec"
 
 
-    @classmethod
-    def from_formulaic(cls, formula: str, data: object, output: str = "numpy",
-                       include_intercept: bool = True, ensure_full_rank: bool = True, **kwargs, ) -> "ModelDesignSpec":
-        """Build from a formulaic model_matrix call."""
-        if not include_intercept:
-            formula = formula + " + 0"
-
-        mm = formulaic.Formula(formula,
-                               _parser=formulaic.parser.DefaultFormulaParser(include_intercept=include_intercept),
-                               **kwargs,
-                               ).get_model_matrix(data, output=output, ensure_full_rank=ensure_full_rank, **kwargs)
-
-        # Extract what we need
-        dv_term_names = (
-            list(mm.lhs.model_spec.column_names)
-            if hasattr(mm.lhs.model_spec, "column_names")
-            else [str(t) for t in mm.lhs.model_spec.terms]
-        )
-        iv_term_names = (
-            list(mm.rhs.model_spec.column_names)
-            if hasattr(mm.rhs.model_spec, "column_names")
-            else [str(t) for t in mm.rhs.model_spec.terms]
-        )
-
-        model_terms = ModelTerms.from_model_spec(mm.rhs.model_spec)
-
-        return cls(DV=mm.lhs,
-                   IV=mm.rhs,
-                   model_terms=model_terms,
-                   formula=formula,
-                   dv_term_names=dv_term_names,
-                   iv_term_names=iv_term_names,
-                   metadata={
-                                "include_intercept": include_intercept,
-                                "ensure_full_rank" : ensure_full_rank,
-                                "output"           : output,
-                            } | kwargs,
-                   )
-
-
-    @staticmethod
-    def from_formula(formula: str, data: object, output: str = "numpy",
-                     include_intercept: bool = True, ensure_full_rank: bool = True, **kwargs,):
-
-        """Build from a formulaic model_matrix call."""
-        if not include_intercept:
-            formula = formula + " + 0"
-
-        mm = Formula(formula,
-                     _parser=DefaultFormulaParser(include_intercept=include_intercept),
-                     **kwargs,
-                     ).get_model_matrix(data, output=output, ensure_full_rank=ensure_full_rank, **kwargs)
-
-
-        # Extract what we need
-        DV = mm.lhs                                                   # Maintains a formuliac.model_spec.ModelSpec
-        IV = mm.rhs                                                   # Maintains a formuliac.model_spec.ModelSpec
-        model_terms = {"dv": ModelTerms.from_model_spec(mm.lhs.model_spec),
-                       "iv": ModelTerms.from_model_spec(mm.rhs.model_spec)}
-
-        return DV, IV, model_terms
 
 
 @dataclass
@@ -912,13 +850,15 @@ class ModelTerms(CoreDataclass):
     """
 
     terms: list = field(default_factory=list)   # list[Term]
+    rhs: Optional[list] = None
+    lhs: Optional[list] = None
 
 
     def __post_init__(self):
         self.__name__ = "Researchpy.ModelTerms"
 
     # ------------------------------------------------------------------ #
-    #  Factories                                                           #
+    #  Factories                                                          #
     # ------------------------------------------------------------------ #
     @classmethod
     def from_formula(cls, formula: str, include_intercept: bool = False) -> "ModelTerms":
@@ -964,51 +904,66 @@ class ModelTerms(CoreDataclass):
         >>> mt[1].is_factor
         [True, True]
         """
-        #if "~" not in formula:
-        #    raise ValueError(
-        #        f"Formula must contain '~' separating dependent and independent "
-        #        f"variables. Got: '{formula}'. Example: 'y ~ C(x)'."
-        #    )
+        if not include_intercept:
+            formula = formula + " + 0"
 
         parsed = formulaic.Formula(formula)
 
         # --- Extract DV names from LHS ---
-        dv_names = []
+        lhs_terms = []
         if parsed.lhs:
             for lhs_term in parsed.lhs:
                 for factor in lhs_term.factors:
                     factor_str = str(factor)
                     if factor_str != "1":
-                        dv_names.append(factor_str)
+                        lhs_terms.append(Term(_term=factor, term=factor_str))
+
 
         # --- Build Term objects from RHS ---
-        terms = []
+        rhs_terms = []
         if parsed.rhs:
             for rhs_term in parsed.rhs:
                 # Build the term string from factors
                 factors_strs = [str(f) for f in rhs_term.factors]
 
                 # Skip intercept (factor is "1") unless requested
-                if factors_strs == ["1"]:
-                    if include_intercept:
-                        terms.append(Term(_term=1, term="Intercept"))
-                    continue
+                if include_intercept:
+                    if factors_strs == ["1"] or factors_strs == ["0"] or factors_strs == ["intercept"] or factors_strs == ["Intercept"]:
+                        rhs_terms.append(Term(_term=rhs_term, term="Intercept"))
+                        continue
 
                 # Build the term string: "C(x):C(k)" or "z"
                 term_str = ":".join(factors_strs)
 
                 # Term.__post_init__ handles: name, is_interaction, is_factor
-                term_obj = Term(_term=term_str, term=term_str)
+                term_obj = Term(_term=rhs_term, term=term_str)
+                rhs_terms.append(term_obj)
+
+
+        # -- If no rhs or lhs is provided, return based on available ---
+        if not hasattr(parsed, 'lhs') and not hasattr(parsed, 'rhs'):
+            terms = []
+            for term in parsed:
+                # Build the term string from factors
+                factors_strs = [str(f) for f in term.factors]
+
+                # Skip intercept (factor is "1") unless requested
+                if include_intercept:
+                    if factors_strs == ["1"] or factors_strs == ["0"] or factors_strs == ["intercept"] or factors_strs == ["Intercept"]:
+                        terms.append(Term(_term=term, term="Intercept"))
+                        continue
+
+                # Build the term string: "C(x):C(k)" or "z"
+                term_str = ":".join(factors_strs)
+
+                # Term.__post_init__ handles: name, is_interaction, is_factor
+                term_obj = Term(_term=term, term=term_str)
                 terms.append(term_obj)
+        else:
+            terms = lhs_terms + rhs_terms
 
 
-        if not parsed.lhs and parsed.rhs:
-            # If no LHS is provided, treat the first RHS term as the DV
-            first_term = terms.pop(0)
-            dv_names.append(first_term.term)
-
-        #return cls(terms=terms, dv=dv_names)
-        return cls(terms=terms)
+        return cls(terms=terms, lhs=lhs_terms, rhs=rhs_terms)
 
 
     @classmethod
@@ -1028,6 +983,11 @@ class ModelTerms(CoreDataclass):
         -------
         ModelTerms
         """
+
+        if not isinstance(model_spec, formulaic.ModelSpec):
+            raise ValueError("Input must be a formulaic ModelSpec object.")
+
+
         structure = model_spec.structure
         encoder_state = model_spec.encoder_state
 
@@ -1105,6 +1065,34 @@ class ModelTerms(CoreDataclass):
             terms.append(term_obj)
 
         return cls(terms=terms)
+
+
+    @classmethod
+    def from_model_specs(cls, model_spec) -> "ModelTerms":
+        """Build ``ModelTerms`` from a formulaic ``ModelSpecs`` object.
+
+        Uses ``model_spec.structure`` to reliably map each column name to
+        its parent term, and ``model_spec.encoder_state`` to determine all
+        category levels and reference categories for factor terms.
+
+        Parameters
+        ----------
+        model_spec : formulaic.ModelSpecs
+            Typically ``mm.model_spec`` from a formulaic ModelMatrix.
+
+        Returns
+        -------
+        ModelTerms
+        """
+
+        if not isinstance(model_spec, formulaic.ModelSpecs):
+            raise ValueError("Input must be a formulaic ModelSpecs object.")
+
+        rhs_terms = cls.from_model_spec(model_spec._structure['rhs'])
+        lhs_terms = cls.from_model_spec(model_spec._structure['lhs'])
+        #terms = rhs_terms.terms + lhs_terms.terms
+
+        return cls(lhs=lhs_terms, rhs=rhs_terms)
 
 
     @classmethod

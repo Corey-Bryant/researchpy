@@ -1,4 +1,5 @@
-from researchpy.core.matrix_design import DesignMatrix
+#from researchpy.core.matrix_design import DesignMatrix
+from researchpy.engine import DesignMatrix
 
 from researchpy.utility import *
 from researchpy.models.postestimation.predict import predict
@@ -42,8 +43,17 @@ class BaseModel(DesignMatrix):
         self.ModelDesignSpec = ModelDesignSpec()
 
 
-        super().__init__(formula, data, output="numpy", include_intercept=include_intercept,
-                         ensure_full_rank=ensure_full_rank, **kwargs, )
+        #super().__init__(formula, data, output="numpy", include_intercept=include_intercept,
+        #                 ensure_full_rank=ensure_full_rank, **kwargs, )
+        dm = DesignMatrix().from_formula(
+                formula, data, output="numpy",
+                include_intercept=include_intercept,
+                ensure_full_rank=ensure_full_rank, **kwargs,
+        )
+        self.DV = dm.DV
+        self.IV = dm.IV
+        self.model_terms = dm.model_terms
+        self.formula = dm.formula
 
 
         """
@@ -72,8 +82,8 @@ class BaseModel(DesignMatrix):
             solver_options=self.SolverOptions,
             solver_method = self.SolverOptions.estimation_method,       # Should rename solver_method --> estimation_method
             ci_level = conf_level,
-            dv_term_names = self.model_terms['dv'][0].columns,
-            iv_term_names = list(self.model_terms['iv'].column_map.keys())      # Can add _test_stat_name here (either in additional_stats['_test_stat_name'] = "t" if family == "gaussian" else "z"
+            dv_term_names = self.model_terms.lhs.columns,
+            iv_term_names = list(self.model_terms.rhs.column_map.keys())      # Can add _test_stat_name here (either in additional_stats['_test_stat_name'] = "t" if family == "gaussian" else "z"
         )
 
 
@@ -85,7 +95,7 @@ class BaseModel(DesignMatrix):
         self.ModelEffects = ModelEffects()
 
         self.CoefResults = CoefResults()
-        self.CoefResults.term = list(self.model_terms['iv'].column_map.keys())
+        self.CoefResults.term = list(self.model_terms.rhs.column_map.keys())
 
 
 
@@ -210,7 +220,7 @@ class BaseModel(DesignMatrix):
         col_to_idx = {col: i for i, col in enumerate(coef_terms)}
 
         # Column map for display names
-        column_map = self.ModelDesignSpec.model_terms['iv'].column_map  # orig col → cleaned col
+        column_map = self.ModelDesignSpec.model_terms.rhs.column_map  # orig col → cleaned col
 
         # ---- Helper to extract a stats row for a given original column name --
         def _stats_row(orig_col):
@@ -250,8 +260,7 @@ class BaseModel(DesignMatrix):
         col_pv = []
         col_ci = []
 
-        for term in self.ModelDesignSpec.model_terms['iv'].terms:
-            #term = self.ModelDesignSpec.model_terms['iv'][term]
+        for term in self.ModelDesignSpec.model_terms.rhs.terms:
 
             is_factor = (
                 term.is_factor if not term.is_interaction

@@ -15,13 +15,13 @@ for every computation in researchpy. Regression models, descriptive statistics (
 categorical), inferential tests, and everything in between.
 
 ```
-User Input ──► SyntaxParser ──► MatrixEngine ──► TableEngine ──► pd.DataFrame
+User Input ──► FormulaSpec ──► MatrixEngine ──► TableEngine ──► pd.DataFrame
                (parse)          (compute)        (format)        (result)
 ```
 
 | Layer | Module | Class | Responsibility |
 |-------|--------|-------|----------------|
-| **1. Syntax** | `engine/syntax.py` | `SyntaxParser` | Universal input parsing — normalizes all calling conventions into a single dataclass |
+| **1. Syntax** | `engine/syntax.py` | `FormulaSpec` | Universal input parsing — normalizes all calling conventions into a single dataclass |
 | **2. Matrix** | `engine/matrix.py` | `MatrixEngine` | Design matrix construction via `formulaic` — builds LHS/RHS numerical matrices |
 | **3. Table** | `engine/table.py` | `TableEngine` | Result table assembly — formats computed statistics into polished DataFrames |
 
@@ -30,7 +30,7 @@ User Input ──► SyntaxParser ──► MatrixEngine ──► TableEngine �
 - **Single entry point:** Every researchpy function calls `SyntaxParser.from_args()` (or a subclass
   override) first. No function parses user input on its own.
 - **Subclass extensibility:** Domain-specific specs (e.g., `AnovaSpec`, `TTestSpec`) subclass
-  `SyntaxParser` and override `from_args()` for validation while inheriting the full parsing logic.
+  `FormulaSpec` and override `from_args()` for validation while inheriting the full parsing logic.
 - **Separation of concerns:** Parsing, matrix construction, and table formatting are completely
   independent. Each layer consumes the output of the previous layer and knows nothing about the
   layers above it.
@@ -43,26 +43,26 @@ User Input ──► SyntaxParser ──► MatrixEngine ──► TableEngine �
 | Class | Source | Used By |
 |-------|--------|---------|
 | `CoreDataclass` | `containers/base.py` | All engine classes inherit from it |
-| `ModelTerms` / `Term` | `containers/multivariable.py` | `SyntaxParser` (formula parsing), `MatrixEngine` (term metadata) |
+| `ModelTerms` / `Term` | `containers/multivariable.py` | `FormulaSpec` (formula parsing), `MatrixEngine` (term metadata) |
 | `ModelDesignSpec` | `containers/multivariable.py` | Model-level consumers of `MatrixEngine` output |
 | `Family` (+ subclasses) | `models/families.py` | GLM/regression consumers that operate on `MatrixEngine` output |
 | `formulaic.Formula` | `formulaic` package | `MatrixEngine.from_formula()` |
 
 ---
 
-## Layer 1: SyntaxParser (`engine/syntax.py`)
+## Layer 1: FormulaSpec (`engine/syntax.py`)
 
 ### Purpose
 
 The **universal input parsing layer**. Takes any supported calling convention and normalizes it
-into a single `SyntaxParser` dataclass instance. All downstream computation operates exclusively
+into a single `FormulaSpec` dataclass instance. All downstream computation operates exclusively
 on the fields of this dataclass.
 
-### Class: `SyntaxParser`
+### Class: `FormulaSpec`
 
 ```python
 @dataclass
-class SyntaxParser(CoreDataclass):
+class FormulaSpec(CoreDataclass):
     DV: List[str]                          # Dependent variable column name(s)
     IV: Optional[List[str]]                # Independent variables (marginal computation)
     by: Optional[List[str]]                # Row grouping variable(s) (cell means / pivot rows)
@@ -94,7 +94,7 @@ def from_args(
     over=None,          # keyword: str or list[str]
     data=None,          # keyword: pd.DataFrame
     weights=None,       # keyword: str
-) -> "SyntaxParser":
+) -> "FormulaSpec":
 ```
 
 ### Supported Calling Conventions
@@ -110,19 +110,19 @@ Pass a DataFrame directly. Each column becomes a DV.
 
 ```python
 # Single column
-spec = SyntaxParser.from_args(df[['y']])
+spec = FormulaSpec.from_args(df[['y']])
 # spec.DV = ['y'], spec.by = None, spec.IV = None
 
 # Multiple columns — compute for each
-spec = SyntaxParser.from_args(df[['y', 'z']])
+spec = FormulaSpec.from_args(df[['y', 'z']])
 # spec.DV = ['y', 'z'], spec.by = None
 
 # Raw ndarray (1-D)
-spec = SyntaxParser.from_args(np.array([1, 2, 3, 4]))
+spec = FormulaSpec.from_args(np.array([1, 2, 3, 4]))
 # spec.DV = ['value'], spec.data = DataFrame({'value': [1,2,3,4]})
 
 # Raw ndarray (2-D)
-spec = SyntaxParser.from_args(np.array([[1, 2], [3, 4]]))
+spec = FormulaSpec.from_args(np.array([[1, 2], [3, 4]]))
 # spec.DV = ['col_0', 'col_1']
 ```
 
@@ -133,7 +133,7 @@ spec = SyntaxParser.from_args(np.array([[1, 2], [3, 4]]))
 Pass a list of column name strings and a DataFrame.
 
 ```python
-spec = SyntaxParser.from_args(["y", "k", "c"], df)
+spec = FormulaSpec.from_args(["y", "k", "c"], df)
 # spec.DV = ['y', 'k', 'c'], spec.data = df
 ```
 
@@ -144,7 +144,7 @@ spec = SyntaxParser.from_args(["y", "k", "c"], df)
 Pass a single pandas Series.
 
 ```python
-spec = SyntaxParser.from_args(df['y'])
+spec = FormulaSpec.from_args(df['y'])
 # spec.DV = ['y'], spec.data = DataFrame({'y': ...})
 ```
 
@@ -156,11 +156,11 @@ Pass a Wilkinson-style formula string and a DataFrame.
 
 ```python
 # Single grouping variable → by
-spec = SyntaxParser.from_args("y ~ C(x)", df)
+spec = FormulaSpec.from_args("y ~ C(x)", df)
 # spec.DV = ['y'], spec.by = ['x']
 
 # Multiple main effects → marginal (IV)
-spec = SyntaxParser.from_args("y ~ C(x) + C(k)", df)
+spec = FormulaSpec.from_args("y ~ C(x) + C(k)", df)
 # spec.DV = ['y'], spec.IV = ['x', 'k']
 ```
 
@@ -172,17 +172,17 @@ Pass named keyword arguments.
 
 ```python
 # Marginal (stacked results for each IV independently)
-spec = SyntaxParser.from_args(dv="y", iv=["x", "k"], data=df)
+spec = FormulaSpec.from_args(dv="y", iv=["x", "k"], data=df)
 # spec.DV = ['y'], spec.IV = ['x', 'k']
 # spec.formula = "y ~ C(x) + C(k)"
 
 # Cell grouping
-spec = SyntaxParser.from_args(dv="y", by="x", data=df)
+spec = FormulaSpec.from_args(dv="y", by="x", data=df)
 # spec.DV = ['y'], spec.by = ['x']
 # spec.formula = "y ~ C(x)"
 
 # Pivot layout
-spec = SyntaxParser.from_args(dv="y", by="x", over="k", data=df)
+spec = FormulaSpec.from_args(dv="y", by="x", over="k", data=df)
 # spec.DV = ['y'], spec.by = ['x'], spec.over = ['k']
 # spec.formula = "y ~ C(x)*C(k)"
 ```
@@ -193,15 +193,15 @@ spec = SyntaxParser.from_args(dv="y", by="x", over="k", data=df)
 
 ```python
 # Cell means (interaction → by)
-spec = SyntaxParser.from_args("y ~ C(x):C(k)", df)
+spec = FormulaSpec.from_args("y ~ C(x):C(k)", df)
 # spec.DV = ['y'], spec.by = ['x', 'k']
 
 # Pivot (star expansion → by + over)
-spec = SyntaxParser.from_args("y ~ C(x)*C(k)", df)
+spec = FormulaSpec.from_args("y ~ C(x)*C(k)", df)
 # spec.DV = ['y'], spec.by = ['x'], spec.over = ['k']
 
 # Mixed formula (main effects + non-star interactions → sub_specs)
-spec = SyntaxParser.from_args("y ~ C(x) + C(k):C(z)", data=df)
+spec = FormulaSpec.from_args("y ~ C(x) + C(k):C(z)", data=df)
 # spec.DV = ['y'], spec.sub_specs = [
 #     TableTermSpec(term='C(x)', name='x', layout='iv', variables=['x']),
 #     TableTermSpec(term='C(k):C(z)', name='k:z', layout='by', variables=['k', 'z']),
@@ -275,7 +275,7 @@ as_categorical("y ~ x + age", data=df)  # → "y ~ C(x) + age"  (if age is numer
 
 ### Purpose
 
-The **design matrix construction layer**. Takes the output of `SyntaxParser` and builds
+The **design matrix construction layer**. Takes the output of `FormulaSpec` and builds
 the numerical LHS/RHS matrices that regression models and computation routines consume.
 This is the **single home** for all `formulaic.Formula.get_model_matrix` calls.
 
@@ -324,11 +324,11 @@ engine.k            # 4 (Intercept + x1 + x2 + group[T.b])
 
 #### `MatrixEngine.from_spec(spec, ...)`
 
-Build from a `SyntaxParser` instance. Delegates to `from_formula()` using the spec's
+Build from a `FormulaSpec` instance. Delegates to `from_formula()` using the spec's
 `formula` and `data` attributes.
 
 ```python
-spec = SyntaxParser.from_args("y ~ x1 + C(group)", df)
+spec = FormulaSpec.from_args("y ~ x1 + C(group)", df)
 engine = MatrixEngine.from_spec(spec)
 ```
 
@@ -541,16 +541,20 @@ result = engine.pivot(long_df, row_vars=["x"], col_vars=["k"], value_col="Mean")
 
 ```python
 import pandas as pd
-from researchpy.engine import SyntaxParser, TableEngine, TableSpec
+from researchpy.engine import FormulaSpec, TableEngine, TableSpec
+
+
+
 
 df = pd.DataFrame({
-    "score": [85, 90, 78, 92, 88, 76, 95, 82],
-    "group": ["A", "A", "A", "A", "B", "B", "B", "B"],
-    "gender": ["M", "F", "M", "F", "M", "F", "M", "F"],
-})
+  "score" : [85, 90, 78, 92, 88, 76, 95, 82],
+  "group" : ["A", "A", "A", "A", "B", "B", "B", "B"],
+  "gender": ["M", "F", "M", "F", "M", "F", "M", "F"],
+}
+)
 
 # Step 1: Parse input
-spec = SyntaxParser.from_args(dv="score", iv=["group", "gender"], data=df)
+spec = FormulaSpec.from_args(dv="score", iv=["group", "gender"], data=df)
 # spec.DV = ['score'], spec.IV = ['group', 'gender']
 # spec.formula = "score ~ C(group) + C(gender)"
 
@@ -566,16 +570,20 @@ result = engine.build(computed_rows)
 ### Example 2: Regression Model
 
 ```python
-from researchpy.engine import SyntaxParser, MatrixEngine
+from researchpy.engine import FormulaSpec, MatrixEngine
+
+
+
 
 df = pd.DataFrame({
-    "y": [1.2, 2.3, 3.1, 4.5, 5.2],
-    "x1": [1, 2, 3, 4, 5],
-    "x2": [2.1, 3.2, 2.8, 4.1, 3.9],
-})
+  "y" : [1.2, 2.3, 3.1, 4.5, 5.2],
+  "x1": [1, 2, 3, 4, 5],
+  "x2": [2.1, 3.2, 2.8, 4.1, 3.9],
+}
+)
 
 # Step 1: Parse input
-spec = SyntaxParser.from_args("y ~ x1 + x2", df)
+spec = FormulaSpec.from_args("y ~ x1 + x2", df)
 
 # Step 2: Build design matrices
 engine = MatrixEngine.from_spec(spec)
@@ -588,35 +596,38 @@ engine = MatrixEngine.from_spec(spec)
 # H = engine.hat_matrix()
 ```
 
-### Example 3: Subclassing SyntaxParser
+### Example 3: Subclassing FormulaSpec
 
 ```python
-from researchpy.engine.syntax import SyntaxParser
+from researchpy.engine.syntax import FormulaSpec
 
-class AnovaSpec(SyntaxParser):
-    """Domain-specific spec for ANOVA that enforces categorical IVs."""
 
-    @classmethod
-    def from_args(cls, *args, **kwargs):
-        # Delegate parsing to parent
-        spec = super().from_args(*args, **kwargs)
 
-        # Domain-specific validation
-        if spec.IV is not None:
-            for var in spec.IV:
-                if pd.api.types.is_numeric_dtype(spec.data[var]):
-                    raise ValueError(
-                        f"ANOVA requires categorical grouping variables. "
-                        f"'{var}' is numeric. Use C({var}) to specify as categorical."
-                    )
 
-        return spec
+class AnovaSpec(FormulaSpec):
+  """Domain-specific spec for ANOVA that enforces categorical IVs."""
+
+  @classmethod
+  def from_args(cls, *args, **kwargs):
+    # Delegate parsing to parent
+    spec = super().from_args(*args, **kwargs)
+
+    # Domain-specific validation
+    if spec.IV is not None:
+      for var in spec.IV:
+        if pd.api.types.is_numeric_dtype(spec.data[var]):
+          raise ValueError(
+                  f"ANOVA requires categorical grouping variables. "
+                  f"'{var}' is numeric. Use C({var}) to specify as categorical."
+          )
+
+    return spec
 ```
 
 ### Example 4: Pivot Table (Star Expansion)
 
 ```python
-spec = SyntaxParser.from_args("score ~ C(group)*C(gender)", df)
+spec = FormulaSpec.from_args("score ~ C(group)*C(gender)", df)
 # spec.by = ['group'], spec.over = ['gender']
 
 # After computing group×gender cell means:
@@ -643,7 +654,7 @@ pivot_result = engine.pivot(long_results, row_vars=["group"], col_vars=["gender"
 
 ```python
 __all__ = [
-    "SyntaxParser",      # Layer 1: input parsing
+    "FormulaSpec",      # Layer 1: input parsing
     "MatrixEngine",      # Layer 2: design matrix construction
     "TableEngine",       # Layer 3: result table assembly
     "TableSpec",         # Table layout specification
@@ -659,8 +670,8 @@ __all__ = [
 
 ```
 researchpy/engine/
-├── __init__.py      # Package exports (SyntaxParser, MatrixEngine, TableEngine, etc.)
-├── syntax.py        # Layer 1: SyntaxParser, _parse_formula, _args_to_formula,
+├── __init__.py      # Package exports (FormulaSpec, MatrixEngine, TableEngine, etc.)
+├── syntax.py        # Layer 1: FormulaSpec, _parse_formula, _args_to_formula,
 │                    #          _is_star_expansion, _build_sub_specs,
 │                    #          as_continuous, as_categorical, _validate_columns
 ├── matrix.py        # Layer 2: MatrixEngine (from_formula, from_spec,
@@ -679,7 +690,7 @@ researchpy/engine/
 |----------|------------|---------|
 | `SyntaxParser.from_args()` | Public | Universal input gate — resolves any calling convention |
 | `_args_to_formula()` | Private | Converts keyword args (dv, iv, by, over) → formula string |
-| `_parse_formula()` | Private | Parses formula string → `SyntaxParser` via `ModelTerms.from_formula()` |
+| `_parse_formula()` | Private | Parses formula string → `FormulaSpec` via `ModelTerms.from_formula()` |
 | `_is_star_expansion()` | Private | Detects if main effects + interactions form a star expansion |
 | `_build_sub_specs()` | Private | Builds `TableTermSpec` list for mixed formulas |
 | `as_continuous()` | Public | Strips `C()` wrappers from formula |
@@ -691,7 +702,7 @@ researchpy/engine/
 | Method | Visibility | Purpose |
 |--------|------------|---------|
 | `MatrixEngine.from_formula()` | Public | Builds design matrices from formula + data via `formulaic` |
-| `MatrixEngine.from_spec()` | Public | Builds from a `SyntaxParser` instance |
+| `MatrixEngine.from_spec()` | Public | Builds from a `FormulaSpec` instance |
 | `MatrixEngine.hat_matrix()` | Public | H = X(X'X)⁻¹X' with pseudoinverse fallback |
 | `MatrixEngine.j_matrix()` | Public | n×n ones matrix |
 | `MatrixEngine.identity_matrix()` | Public | n×n identity matrix |
@@ -717,5 +728,5 @@ All layers raise descriptive errors with actionable messages:
 | `ValueError` | `over` without `by` | *"'over' requires 'by' to also be specified..."* |
 | `ValueError` | No data provided | *"Formula '...' requires a DataFrame..."* |
 | `ValueError` | Column not in DataFrame | *"Column(s) [...] specified for ... not found..."* |
-| `ValueError` | `from_spec` with no formula | *"SyntaxParser spec has no formula..."* |
+| `ValueError` | `from_spec` with no formula | *"FormulaSpec spec has no formula..."* |
 | `TypeError` | Unsupported arg1 type | *"Unsupported type for first argument: ..."* |

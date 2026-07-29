@@ -1,5 +1,5 @@
 """
-MatrixEngine — the design matrix construction layer.
+DesignMatrix — the design matrix construction layer.
 
 Takes the output of :class:`~researchpy.engine.syntax.SyntaxParser` and
 builds the numerical design matrices used by regression models, descriptive
@@ -11,11 +11,11 @@ and :class:`~researchpy.containers.multivariable.ModelTerms` containers.
 
 Usage
 -----
->>> from researchpy.engine.syntax import SyntaxParser
->>> from researchpy.engine.matrix import MatrixEngine
+>>> from researchpy.engine.syntax import FormulaSpec
+>>> from researchpy.engine.matrix import DesignMatrix
 >>>
 >>> spec = SyntaxParser.from_args("y ~ x1 + x2", df)
->>> engine = MatrixEngine.from_spec(spec)
+>>> engine = DesignMatrix.from_spec(spec)
 >>> engine.DV          # numpy array / formulaic ModelMatrix (LHS)
 >>> engine.IV          # numpy array / formulaic ModelMatrix (RHS)
 >>> engine.model_terms # ModelTerms container
@@ -31,19 +31,21 @@ import numpy as np
 from formulaic import Formula
 from formulaic.parser import DefaultFormulaParser
 
+from formulaic import model_matrix
+
 from researchpy.containers.base import CoreDataclass
 from researchpy.containers.multivariable import ModelTerms
 
 if TYPE_CHECKING:
-    from researchpy.engine.syntax import SyntaxParser
+    from researchpy.engine.syntax import FormulaSpec
 
 
 # ======================================================================
-# MatrixEngine dataclass
+# DesignMatrix dataclass
 # ======================================================================
 
 @dataclass
-class MatrixEngine(CoreDataclass):
+class DesignMatrix(CoreDataclass):
     """Design matrix container built from a parsed syntax specification.
 
     Attributes
@@ -55,7 +57,7 @@ class MatrixEngine(CoreDataclass):
     IV : array-like or None
         Right-hand side (independent variables) design matrix.
     model_terms : dict or None
-        ``{"dv": ModelTerms, "iv": ModelTerms}`` mapping term metadata
+        ``{"lhs": ModelTerms, "rhs": ModelTerms}`` mapping term metadata
         for both sides of the formula.
     formula : str or None
         The formula string used to build the matrices.
@@ -74,33 +76,35 @@ class MatrixEngine(CoreDataclass):
 
     def __post_init__(self):
         super().__post_init__()
-        self.__name__ = "Researchpy.MatrixEngine"
+        self.__name__ = "Researchpy.DesignMatrix"
 
         # Auto-populate n, k from array shapes
         if self.DV is not None and self.n is None:
             self.n = np.asarray(self.DV).shape[0]
+
         if self.IV is not None and self.k is None:
             self.k = np.asarray(self.IV).shape[1] if np.asarray(self.IV).ndim > 1 else 1
 
+
     # ==================================================================
-    # Factory: from SyntaxParser spec
+    # Factory: from FormulaSpec spec
     # ==================================================================
     @classmethod
     def from_spec(
         cls,
-        spec: "SyntaxParser",
+        spec: "FormulaSpec",
         output: str = "numpy",
         include_intercept: bool = True,
         ensure_full_rank: bool = True,
         **kwargs,
-    ) -> "MatrixEngine":
-        """Build a MatrixEngine from a :class:`SyntaxParser` instance.
+    ) -> "DesignMatrix":
+        """Build a DesignMatrix from a :class:`FormulaSpec` instance.
 
         Delegates to :meth:`from_formula` using the spec's formula and data.
 
         Parameters
         ----------
-        spec : SyntaxParser
+        spec : FormulaSpec
             Parsed syntax specification (must have ``formula`` and ``data``).
         output : str, optional
             Output format for ``formulaic``.  Default is ``"numpy"``.
@@ -114,7 +118,7 @@ class MatrixEngine(CoreDataclass):
 
         Returns
         -------
-        MatrixEngine
+        DesignMatrix
 
         Raises
         ------
@@ -123,12 +127,12 @@ class MatrixEngine(CoreDataclass):
         """
         if spec.formula is None:
             raise ValueError(
-                "SyntaxParser spec has no formula.  Cannot build a design matrix "
+                "FormulaSpec spec has no formula.  Cannot build a design matrix "
                 "without a formula string."
             )
         if spec.data is None:
             raise ValueError(
-                "SyntaxParser spec has no data.  Cannot build a design matrix "
+                "FormulaSpec spec has no data.  Cannot build a design matrix "
                 "without a DataFrame."
             )
 
@@ -140,6 +144,7 @@ class MatrixEngine(CoreDataclass):
             ensure_full_rank=ensure_full_rank,
             **kwargs,
         )
+
 
     # ==================================================================
     # Factory: from formula string + data
@@ -153,12 +158,17 @@ class MatrixEngine(CoreDataclass):
         include_intercept: bool = True,
         ensure_full_rank: bool = True,
         **kwargs,
-    ) -> "MatrixEngine":
-        """Build a MatrixEngine from a formula string and DataFrame.
+    ) -> "DesignMatrix":
+        """Build a DesignMatrix from a formula string and DataFrame.
 
-        Uses ``formulaic.Formula.get_model_matrix`` to construct the
-        LHS and RHS matrices, then wraps them in a ``MatrixEngine``
-        instance together with :class:`ModelTerms` metadata.
+        Constructs a :class:`DesignMatrix` instance using ``formulaic.sugar.model_matrix`` to construct the
+        ``DV (lhs)`` and ``IV (rhs)`` matrices, then wraps them in a ``DesignMatrix``
+        instance together with :class:`ModelTerms` metadata. ``DV`` and ``IV`` retains maintains the
+        ``formulaic.model_matrix.ModelMatrix`` interface.
+
+        Within the ``model_terms`` attribute, the ``lhs`` key contains metadata for the dependent variable (``DV``),
+        while the ``rhs`` key contains metadata for the independent variables (``IV``).
+
 
         Parameters
         ----------
@@ -178,29 +188,25 @@ class MatrixEngine(CoreDataclass):
 
         Returns
         -------
-        MatrixEngine
+        DesignMatrix
         """
-        formula_str = formula
-        if not include_intercept:
-            formula_str = formula_str + " + 0"
-
-        mm = Formula(
-            formula_str,
-            _parser=DefaultFormulaParser(include_intercept=include_intercept),
-        ).get_model_matrix(
-            data,
-            output=output,
-            ensure_full_rank=ensure_full_rank,
-            **kwargs,
-        )
+        formula = Formula(formula,
+                          _parser=DefaultFormulaParser(include_intercept=include_intercept),
+                          **kwargs,
+                          )
+        mm = formula.get_model_matrix(data,
+                                      output=output,
+                                      ensure_full_rank=ensure_full_rank,**kwargs,
+                                      )
 
         DV = mm.lhs
         IV = mm.rhs
 
-        terms = {
-            "dv": ModelTerms.from_model_spec(mm.lhs.model_spec),
-            "iv": ModelTerms.from_model_spec(mm.rhs.model_spec),
-        }
+        #terms = {
+        #    "lhs": ModelTerms.from_model_spec(mm.lhs.model_spec),
+        #    "rhs": ModelTerms.from_model_spec(mm.rhs.model_spec),
+        #}
+        terms = ModelTerms.from_model_specs(mm.model_spec)
 
         return cls(
             DV=DV,
@@ -208,6 +214,71 @@ class MatrixEngine(CoreDataclass):
             model_terms=terms,
             formula=formula,
         )
+
+
+
+
+    @classmethod
+    def get_design_matrix(cls,
+        formula: str,
+        data: Any,
+        output: str = "numpy",
+        include_intercept: bool = True,
+        ensure_full_rank: bool = True,
+        **kwargs,
+    ) -> "DesignMatrix":
+        """Build a DesignMatrix from a formula string and DataFrame.
+
+        Constructs a :class:`DesignMatrix` instance using ``formulaic.sugar.model_matrix`` to construct the
+        ``DV (lhs)`` and ``IV (rhs)`` matrices, then wraps them in a ``DesignMatrix``
+        instance together with :class:`ModelTerms` metadata. ``DV`` and ``IV`` retains maintains the
+        ``formulaic.model_matrix.ModelMatrix`` interface.
+
+        Within the ``model_terms`` attribute, the ``lhs`` key contains metadata for the dependent variable (``DV``),
+        while the ``rhs`` key contains metadata for the independent variables (``IV``).
+
+
+        Parameters
+        ----------
+        formula : str
+            Wilkinson-style formula (e.g., ``"y ~ x1 + x2"``).
+        data : pd.DataFrame
+            Source data.
+        output : str, optional
+            Output type passed to formulaic (``"numpy"``, ``"pandas"``,
+            ``"sparse"``).  Default is ``"numpy"``.
+        include_intercept : bool, optional
+            Whether to include an intercept.  Default is ``True``.
+        ensure_full_rank : bool, optional
+            Whether to drop aliased columns.  Default is ``True``.
+        **kwargs
+            Extra arguments forwarded to ``formulaic``.
+
+        Returns
+        -------
+        DesignMatrix
+        """
+        formula_str = formula
+        if not include_intercept:
+            formula_str = formula_str + " + 0"
+
+        mm = model_matrix(formula_str, data=data, output=output,
+                          ensure_full_rank=ensure_full_rank, **kwargs)
+
+        DV = mm.lhs
+        IV = mm.rhs
+
+        terms = {
+            "lhs": ModelTerms.from_model_spec(mm.lhs.model_spec),
+            "rhs": ModelTerms.from_model_spec(mm.rhs.model_spec),
+        }
+
+        return DesignMatrix(
+                DV=DV,
+                IV=IV,
+                model_terms=terms,
+                formula=formula,
+            )
 
     # ==================================================================
     # Computational helpers
@@ -275,6 +346,7 @@ class MatrixEngine(CoreDataclass):
         if self.IV is not None:
             lines.append(f"  IV: {type(self.IV).__name__} shape={np.asarray(self.IV).shape}")
         lines.append(f"  n={self.n}, k={self.k}")
+
         if self.model_terms:
             for side, mt in self.model_terms.items():
                 lines.append(f"  model_terms['{side}']: {len(mt)} term(s)")

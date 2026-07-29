@@ -114,7 +114,7 @@ class TableEngine(CoreDataclass):
 
     The ``TableEngine`` is the final step in the engine pipeline:
 
-    1. **SyntaxParser** normalizes user input into a spec.
+    1. **FormulaSpec** normalizes user input into a spec.
     2. **MatrixEngine** builds design matrices (for models).
     3. **TableEngine** formats computed results into polished DataFrames.
 

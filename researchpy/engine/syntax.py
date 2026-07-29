@@ -1,9 +1,9 @@
 """
-SyntaxParser — the universal input parsing layer.
+FormulaSpec — the universal input parsing layer.
 
 Every researchpy function (descriptive, inferential, modeling) calls
-``SyntaxParser.from_args()`` (or its subclass override) first to normalize
-any of the supported calling conventions into a single ``SyntaxParser``
+``FormulaSpec.from_args()`` (or its subclass override) first to normalize
+any of the supported calling conventions into a single ``FormulaSpec``
 dataclass.  The computation engine then operates exclusively on the spec.
 
 Subclasses (e.g., AnovaSpec, TTestSpec) override ``from_args()`` to add
@@ -11,19 +11,19 @@ domain-specific validation while inheriting the full parsing logic.
 
 Supported calling conventions
 -----------------------------
-1. SyntaxParser(df[['y']])                          -> DataFrame/array, no groups
-   SyntaxParser(df[['y', 'z']])                     -> DataFrame/array, no groups (compute for each column)
-2. SyntaxParser(["y", "k", "c"], df)                -> column list + DataFrame
-3. SyntaxParser(df['y'])                            -> Series/array, no groups
-   SyntaxParser('y', df)                            -> Series/array, no groups
-4. SyntaxParser("y ~ C(x)", df)                     -> formula string + DataFrame
-   SyntaxParser("y ~ x", df)                        -> formula string + DataFrame
-5. SyntaxParser(dv="y", by="x", data=df)            -> explicit keywords (cell grouping)
-   SyntaxParser(dv="y", iv=["x","k"], data=df)      -> explicit keywords (marginal) (results stacked)
-   SyntaxParser(dv="y", by="x", over="k", data=df)  -> pivot layout
-6. SyntaxParser("y ~ C(x):C(k)", df)                -> cell means (MultiIndex rows)
-   SyntaxParser("y ~ C(x)*C(k)", df)                -> pivot layout
-   SyntaxParser("y ~ C(x) + C(k) + C(k):C(z)", data=df)  -> mixed (sub_specs)
+1. FormulaSpec(df[['y']])                          -> DataFrame/array, no groups
+   FormulaSpec(df[['y', 'z']])                     -> DataFrame/array, no groups (compute for each column)
+2. FormulaSpec(["y", "k", "c"], df)                -> column list + DataFrame
+3. FormulaSpec(df['y'])                            -> Series/array, no groups
+   FormulaSpec('y', df)                            -> Series/array, no groups
+4. FormulaSpec("y ~ C(x)", df)                     -> formula string + DataFrame
+   FormulaSpec("y ~ x", df)                        -> formula string + DataFrame
+5. FormulaSpec(dv="y", by="x", data=df)            -> explicit keywords (cell grouping)
+   FormulaSpec(dv="y", iv=["x","k"], data=df)      -> explicit keywords (marginal) (results stacked)
+   FormulaSpec(dv="y", by="x", over="k", data=df)  -> pivot layout
+6. FormulaSpec("y ~ C(x):C(k)", df)                -> cell means (MultiIndex rows)
+   FormulaSpec("y ~ C(x)*C(k)", df)                -> pivot layout
+   FormulaSpec("y ~ C(x) + C(k) + C(k):C(z)", data=df)  -> mixed (sub_specs)
 
 Formula operator semantics for descriptive stats
 -------------------------------------------------
@@ -47,18 +47,12 @@ by=["x"], over=["k"] → "C(x)*C(k)"
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, List, Optional, Union, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    pass
-
-import re
+from typing import Any, List, Optional, Union
 
 import numpy as np
 import pandas as pd
 
-from researchpy.containers.base import CoreDataclass
-from researchpy.containers.multivariable import ModelTerms
+from researchpy.containers import CoreDataclass, ModelTerms
 from researchpy.engine.table import TableTermSpec
 
 
@@ -67,7 +61,7 @@ from researchpy.engine.table import TableTermSpec
 # ======================================================================
 
 @dataclass
-class SyntaxParser(CoreDataclass):
+class FormulaSpec(CoreDataclass):
     """Normalized computation specification.
 
     All fields are populated by :meth:`from_args` or :meth:`from_formula`.
@@ -106,19 +100,17 @@ class SyntaxParser(CoreDataclass):
     weights: Optional[str] = None
     sub_specs: Optional[List[TableTermSpec]] = None
 
+
     # ------------------------------------------------------------------
     # Post-init validation
     # ------------------------------------------------------------------
     def __post_init__(self):
         super().__post_init__()
-        self.__name__ = "Researchpy.SyntaxParser"
+        self.__name__ = "Researchpy.FormulaSpec"
+        # --- Ensure formula always exists ---
+        if self.formula is None:
+            self.formula = _args_to_formula(dv=self.DV, iv=self.IV, by=self.by, over=self.over)
 
-        if self.IV is not None and (self.by is not None or self.over is not None):
-            raise ValueError(
-                "Cannot use 'IV' together with 'by' or 'over'. "
-                "'IV' produces marginal (stacked) results for each variable independently. "
-                "'by'/'over' produce cell means or pivot tables. Use one approach or the other."
-            )
 
     # ==================================================================
     # Factory classmethod — the primary entry point
@@ -136,8 +128,8 @@ class SyntaxParser(CoreDataclass):
         over: Optional[Union[str, List[str]]] = None,
         data: Optional[Any] = None,
         weights: Optional[str] = None,
-    ) -> "SyntaxParser":
-        """Resolve any supported calling convention into a *SyntaxParser*.
+    ) -> "FormulaSpec":
+        """Resolve any supported calling convention into a *FormulaSpec*.
 
         This is the universal input gate.  Every researchpy function calls
         this (or its subclass override) first to normalize user input.
@@ -163,7 +155,7 @@ class SyntaxParser(CoreDataclass):
 
         Returns
         -------
-        SyntaxParser (or subclass instance)
+        FormulaSpec (or subclass instance)
 
         Raises
         ------
@@ -238,6 +230,7 @@ class SyntaxParser(CoreDataclass):
                     f"Formula '{arg1}' requires a DataFrame. "
                     f"Pass it as the second positional argument or use data=."
                 )
+
             return _parse_formula(arg1, resolved_data, weights=weights, cls=cls)
 
         # =============================================================
@@ -284,9 +277,11 @@ class SyntaxParser(CoreDataclass):
         # =============================================================
         if isinstance(arg1, (np.ndarray, list, tuple)):
             arr = np.asarray(arg1)
+
             if arr.ndim == 1:
                 df = pd.DataFrame({"value": arr})
                 return cls(DV=["value"], data=df, weights=weights)
+
             else:
                 col_names = [f"col_{i}" for i in range(arr.shape[1])]
                 df = pd.DataFrame(arr, columns=col_names)
@@ -310,7 +305,6 @@ class SyntaxParser(CoreDataclass):
 # ======================================================================
 # Formula construction: keywords → formula string
 # ======================================================================
-
 def _args_to_formula(
     *,
     dv: Optional[List[str]] = None,
@@ -366,16 +360,15 @@ def _args_to_formula(
 
 
 # ======================================================================
-# Formula parsing: formula string → SyntaxParser
+# Formula parsing: formula string → FormulaSpec
 # ======================================================================
-
 def _parse_formula(
     formula: str,
     data: Any,
     weights: Optional[str] = None,
     cls: Optional[type] = None,
-) -> "SyntaxParser":
-    """Parse a formula string into a *SyntaxParser* using formulaic's parser.
+) -> "FormulaSpec":
+    """Parse a formula string into a *FormulaSpec* using formulaic's parser.
 
     Detects the formula operator pattern to determine layout:
 
@@ -395,45 +388,75 @@ def _parse_formula(
     weights : str or None
         Weight column name.
     cls : type, optional
-        Class to instantiate.  Defaults to :class:`SyntaxParser`.
+        Class to instantiate.  Defaults to :class:`FormulaSpec`.
 
     Returns
     -------
-    SyntaxParser (or subclass)
+    FormulaSpec (or subclass)
     """
     if cls is None:
-        cls = SyntaxParser
+        cls = FormulaSpec
 
     mt = ModelTerms.from_formula(formula)
 
-    # Extract DV names from the LHS of the formula
-    dv_names: List[str] = []
-    if "~" in formula:
-        lhs_part = formula.split("~")[0].strip()
-        dv_names = [v.strip() for v in lhs_part.split("+") if v.strip()]
+    dv_names: List[str] = []            # Extract DV names from the LHS of the formula
+    main_effect_terms: List[Any] = []   # Categorize RHS terms into main effects vs interactions
+    interaction_terms: List[Any] = []   # Categorize RHS terms into main effects vs interactions
+    all_rhs_vars: List[str] = []        # Validate that all RHS variable names exist in data
 
-    # Validate DV columns exist in data
-    if dv_names:
-        _validate_columns(dv_names, data, "dependent variable(s)")
+
+    # Extract DV names from the LHS of the formula
+    if mt.lhs:
+        dv_names.extend(v.name.strip() for v in mt.lhs)
+
+        # Validate DV columns exist in data
+        if dv_names:
+            _validate_columns(dv_names, data, "formula LHS (dependent variable(s))")
+
 
     # Categorize RHS terms into main effects vs interactions
-    main_effect_terms: List[Any] = []
-    interaction_terms: List[Any] = []
+    if mt.rhs:
+        for term in mt.rhs:
+            if term.name == "1" or term.name.lower() == "intercept":
+                continue
 
-    for term in mt.terms:
-        if term.is_interaction:
-            interaction_terms.append(term)
-        else:
-            main_effect_terms.append(term)
+            if term.is_interaction:
+                interaction_terms.append(term)
+            else:
+                main_effect_terms.append(term)
 
-    # Validate that all RHS variable names exist in data
-    all_rhs_vars: List[str] = []
-    for term in mt.terms:
-        for var in term.name.split(":"):
-            if var not in all_rhs_vars:
-                all_rhs_vars.append(var)
-    if all_rhs_vars:
-        _validate_columns(all_rhs_vars, data, "formula RHS variable(s)")
+            for var in term.name.split(":"):
+                if var not in all_rhs_vars:
+                    all_rhs_vars.append(var)
+
+        if all_rhs_vars:
+            _validate_columns(all_rhs_vars, data, "formula RHS variable(s)")
+
+
+    if (not mt.lhs and not mt.rhs) and mt.terms:
+        all_terms = []
+
+        for term in mt.terms:
+            if term.name == "1" or term.name == "0" or term.name.lower() == "intercept":
+                continue
+
+            if term.is_interaction:
+                interaction_terms.append(term)
+            else:
+                main_effect_terms.append(term)
+
+            for var in term.name.split(":"):
+                if var not in all_terms:
+                    all_terms.append(var)
+
+        if all_terms:
+            _validate_columns(all_terms, data, "formula variable(s) (no RHS or LHS)")
+
+
+    if weights:
+        _validate_columns([weights], data, "formula weights")
+
+
 
     # =================================================================
     # Determine layout based on term pattern
@@ -524,7 +547,6 @@ def _parse_formula(
 # ======================================================================
 # Formula analysis helpers
 # ======================================================================
-
 def _is_star_expansion(
     main_effect_terms: List[Any],
     interaction_terms: List[Any],
@@ -584,59 +606,6 @@ def _build_sub_specs(
         ))
 
     return sub_specs
-
-
-# ======================================================================
-# Conversion utilities
-# ======================================================================
-
-def as_continuous(formula: str) -> str:
-    """Strip all ``C()`` wrappers from RHS terms.
-
-    ``"y ~ C(x) + C(k)"``  →  ``"y ~ x + k"``
-    """
-    return re.sub(r'C\(([^)]+)\)', r'\1', formula)
-
-
-def as_categorical(formula: str, data: Any = None) -> str:
-    """Wrap all bare RHS variable names in ``C()`` if not already wrapped.
-
-    ``"y ~ x + k"``  →  ``"y ~ C(x) + C(k)"``
-
-    If *data* is provided, only wraps variables whose dtype is non-numeric.
-    Without *data*, wraps all bare terms.
-    """
-    if "~" not in formula:
-        return formula
-
-    lhs, rhs = formula.split("~", 1)
-
-    # Tokenize RHS respecting operators +, :, *
-    tokens = re.split(r'(\s*[+:*]\s*)', rhs)
-    result_tokens: List[str] = []
-
-    for token in tokens:
-        stripped = token.strip()
-        # Skip operators and already-wrapped terms
-        if stripped in ("+", ":", "*", "") or "C(" in stripped:
-            result_tokens.append(token)
-            continue
-
-        # Check if it's a bare variable name
-        if re.match(r'^[A-Za-z_]\w*$', stripped):
-            should_wrap = True
-            if data is not None and isinstance(data, pd.DataFrame):
-                if stripped in data.columns:
-                    if pd.api.types.is_numeric_dtype(data[stripped]):
-                        should_wrap = False
-            if should_wrap:
-                result_tokens.append(token.replace(stripped, f"C({stripped})"))
-            else:
-                result_tokens.append(token)
-        else:
-            result_tokens.append(token)
-
-    return f"{lhs}~{''.join(result_tokens)}"
 
 
 # ======================================================================
