@@ -5,7 +5,7 @@ from researchpy.utility import *
 from researchpy.models.postestimation.predict import predict
 from researchpy.models.families import get_family
 from researchpy.containers import (
-    SolverOptions, FitStatistics, ModelEffects, CoefResults, ModelDesignSpec,
+    SolverOptions, FitStatistics, ModelEffects, CoefResults, ModelDesignSpec, Term,
 )
 
 from researchpy.statistics import _confidence_interval
@@ -45,46 +45,33 @@ class BaseModel(DesignMatrix):
 
         #super().__init__(formula, data, output="numpy", include_intercept=include_intercept,
         #                 ensure_full_rank=ensure_full_rank, **kwargs, )
-        dm = DesignMatrix().from_formula(
-                formula, data, output="numpy",
-                include_intercept=include_intercept,
-                ensure_full_rank=ensure_full_rank, **kwargs,
-        )
+        dm = DesignMatrix.from_formula(formula,
+                                  data,
+                               output="numpy",
+                               include_intercept=include_intercept,
+                               ensure_full_rank=ensure_full_rank,
+                               **kwargs,
+                               )
         self.DV = dm.DV
         self.IV = dm.IV
         self.model_terms = dm.model_terms
-        self.formula = dm.formula
 
-
-        """
-        
-        Parsing the formula and assigning formulaic.model_spec.ModelSpec, and researchpy.ModelTerms instances to self:
-        - self.DV: ModelSpec for the dependent variable (left-hand side of the formula)
-        - self.IV: ModelSpec for the intercept (right-hand side of the formula)
-        - self.model_terms for researchpy.ModelTerms instances
-        
-        """
+        # ModelFit dataclass stores the model design information and fit parameters
+        self.ModelDesignSpec = ModelDesignSpec(
+            formula = dm.formula,
+            model_terms = self.model_terms,
+            family = get_family(family),
+            link = link,
+            solver_options = self.SolverOptions,
+            solver_method = self.SolverOptions.estimation_method,       # Should rename solver_method --> estimation_method
+            ci_level = conf_level,
+        )
 
         # Model design information
         if not hasattr(self, "_test_stat_name"):
             self._test_stat_name = "t" if family == "gaussian" else "z"
 
         self.n, self.k = self.IV.shape
-
-
-
-        # ModelFit dataclass stores the model design information and fit parameters
-        self.ModelDesignSpec = ModelDesignSpec(
-            formula = formula,
-            model_terms = self.model_terms,
-            family = get_family(family),
-            link = link,
-            solver_options=self.SolverOptions,
-            solver_method = self.SolverOptions.estimation_method,       # Should rename solver_method --> estimation_method
-            ci_level = conf_level,
-            dv_term_names = self.model_terms.lhs.columns,
-            iv_term_names = list(self.model_terms.rhs.column_map.keys())      # Can add _test_stat_name here (either in additional_stats['_test_stat_name'] = "t" if family == "gaussian" else "z"
-        )
 
 
         self.FitStatistics = FitStatistics(
@@ -95,7 +82,7 @@ class BaseModel(DesignMatrix):
         self.ModelEffects = ModelEffects()
 
         self.CoefResults = CoefResults()
-        self.CoefResults.term = list(self.model_terms.rhs.column_map.keys())
+        self.CoefResults.term = list(self.model_terms['rhs'].column_map.keys())
 
 
 
@@ -115,6 +102,12 @@ class BaseModel(DesignMatrix):
     #---------------------------------------------------------------------------#
     #                       Shared Computational Methods                        #
     # --------------------------------------------------------------------------#
+    def _from_formula(self, formula, data, output="numpy", include_intercept=True,
+                      ensure_full_rank=True, **kwargs, ):
+
+        return self.from_formula(formula, data, output=output, include_intercept=include_intercept,
+                                 ensure_full_rank=ensure_full_rank, **kwargs, )
+
     def fit(self, estimation_principal=None, **kwargs):
         raise NotImplementedError(
             f"{type(self).__name__} must override fit()."
@@ -204,7 +197,7 @@ class BaseModel(DesignMatrix):
 
 
         # ---- Resolve sources -------------------------------------------------
-        dv = self.ModelDesignSpec.dv_term_names[0]
+        dv_name = self.ModelDesignSpec.model_terms['lhs'].terms[0].name
         ci_level = int(self.ModelDesignSpec.ci_level * 100)
         test_stat_name = self._test_stat_name
 
@@ -220,7 +213,7 @@ class BaseModel(DesignMatrix):
         col_to_idx = {col: i for i, col in enumerate(coef_terms)}
 
         # Column map for display names
-        column_map = self.ModelDesignSpec.model_terms.rhs.column_map  # orig col → cleaned col
+        column_map = self.ModelDesignSpec.model_terms['rhs'].column_map  # orig col → cleaned col
 
         # ---- Helper to extract a stats row for a given original column name --
         def _stats_row(orig_col):
@@ -260,7 +253,7 @@ class BaseModel(DesignMatrix):
         col_pv = []
         col_ci = []
 
-        for term in self.ModelDesignSpec.model_terms.rhs.terms:
+        for term in self.ModelDesignSpec.model_terms['rhs'].terms:
 
             is_factor = (
                 term.is_factor if not term.is_interaction
@@ -339,7 +332,7 @@ class BaseModel(DesignMatrix):
 
 
         return {
-            dv: col_dv,
+            dv_name: col_dv,
             "Coef.": col_coef,
             "Std. Err.": col_se,
             f"{test_stat_name}": col_ts,

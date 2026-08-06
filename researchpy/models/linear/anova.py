@@ -13,7 +13,7 @@ import pandas as pd
 from pandas import DataFrame
 
 from researchpy.models.linear.linear_model import LinearModel
-from researchpy.containers import ModelResults, FactorEffects
+from researchpy.containers import ModelResults, FactorEffects, Term
 from researchpy.utility import as_numeric
 
 
@@ -515,7 +515,7 @@ class Anova(LinearModel):
 
         # Re-fit the model using Sum coding via formulaic
         full_model_formula = (
-            self.ModelDesignSpec.dv_term_names[0]
+            self.ModelDesignSpec.model_terms['lhs'].terms[0].name
             + " ~ "
             + " + ".join(t for t in the_terms_3 if t != "1")
         )

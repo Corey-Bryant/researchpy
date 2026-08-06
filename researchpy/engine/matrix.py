@@ -190,11 +190,10 @@ class DesignMatrix(CoreDataclass):
         -------
         DesignMatrix
         """
-        formula = Formula(formula,
+        mm = Formula(formula,
                           _parser=DefaultFormulaParser(include_intercept=include_intercept),
                           **kwargs,
-                          )
-        mm = formula.get_model_matrix(data,
+                          ).get_model_matrix(data,
                                       output=output,
                                       ensure_full_rank=ensure_full_rank,**kwargs,
                                       )
@@ -202,11 +201,11 @@ class DesignMatrix(CoreDataclass):
         DV = mm.lhs
         IV = mm.rhs
 
-        #terms = {
-        #    "lhs": ModelTerms.from_model_spec(mm.lhs.model_spec),
-        #    "rhs": ModelTerms.from_model_spec(mm.rhs.model_spec),
-        #}
-        terms = ModelTerms.from_model_specs(mm.model_spec)
+        terms = {
+            "lhs": ModelTerms.from_model_spec(mm.lhs.model_spec),
+            "rhs": ModelTerms.from_model_spec(mm.rhs.model_spec),
+        }
+        #terms = ModelTerms.from_model_specs(mm.model_spec)
 
         return cls(
             DV=DV,
@@ -216,10 +215,8 @@ class DesignMatrix(CoreDataclass):
         )
 
 
-
-
     @classmethod
-    def get_design_matrix(cls,
+    def get_design_matrix(
         formula: str,
         data: Any,
         output: str = "numpy",

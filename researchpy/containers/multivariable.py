@@ -71,7 +71,6 @@ class ModelDesignSpec(CoreDataclass):
     model_terms: Optional[ModelTerms] = None
     DV: Optional[np.ndarray] = None
     IV: Optional[np.ndarray] = None
-    dv_term_names: Optional[list] = None
     iv_term_names: Optional[list] = None
     ci_level: Optional[float] = 0.95
     # The distribution family and link function
@@ -984,8 +983,8 @@ class ModelTerms(CoreDataclass):
         ModelTerms
         """
 
-        if not isinstance(model_spec, formulaic.ModelSpec):
-            raise ValueError("Input must be a formulaic ModelSpec object.")
+        #if not isinstance(model_spec, formulaic.ModelSpec):
+        #    raise ValueError("Input must be a formulaic ModelSpec object.")
 
 
         structure = model_spec.structure
@@ -1085,8 +1084,8 @@ class ModelTerms(CoreDataclass):
         ModelTerms
         """
 
-        if not isinstance(model_spec, formulaic.ModelSpecs):
-            raise ValueError("Input must be a formulaic ModelSpecs object.")
+        #if not isinstance(model_spec, formulaic.ModelSpecs):
+        #    raise ValueError("Input must be a formulaic ModelSpecs object.")
 
         rhs_terms = cls.from_model_spec(model_spec._structure['rhs'])
         lhs_terms = cls.from_model_spec(model_spec._structure['lhs'])

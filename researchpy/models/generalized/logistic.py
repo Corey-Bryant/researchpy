@@ -237,7 +237,7 @@ class LogisticRegression(GeneralizedLinearModel):
         n = tp + fp + fn + tn
 
         # --- Build confusion matrix table ---
-        dv_name = self.ModelDesignSpec.dv_term_names[0]
+        dv_name = self.ModelDesignSpec.model_terms['lhs'].terms[0].name
         col_positive = f"{dv_name}=1"
         col_negative = f"{dv_name}=0"
 

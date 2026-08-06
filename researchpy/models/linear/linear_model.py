@@ -2,7 +2,7 @@ from typing import Any
 from pandas import DataFrame
 
 from researchpy.models.base import BaseModel
-from researchpy.optimize import ols_estimation_principal as ols_estimation_principal
+from researchpy.optimize import ols_estimation_principal
 from researchpy.containers import ModelResults, FactorEffects, SolverOptions
 from researchpy.utility import *
 
@@ -23,11 +23,12 @@ class LinearModel(BaseModel):
                                            algorithm=None,)
 
         super().__init__(formula=formula, data=data, conf_level=conf_level,
-                         family="gaussian", link="normal", solver_options=self.SolverOptions,
+                         family="gaussian", link="normal",
+                         solver_options=self.SolverOptions,
                          table_decimals=table_decimals)
 
-        self.__name__ = "Researchpy.LinearModel"
 
+        self.__name__ = "Researchpy.LinearModel"
         self.ModelDesignSpec.model = self.__name__
         self.ModelDesignSpec.model_display_name = self._get_model_display_name()
 
@@ -69,8 +70,8 @@ class LinearModel(BaseModel):
     def __variance_covariance_residual_matrix(self, method="standard",):
 
         if method == "standard":
-            H = self._hat_matrix()
-            I = self._identity_matrix()
+            H = self.hat_matrix()
+            I = self.identity_matrix()
             variance_covariance_residual_matrix = np.asarray(self.ModelEffects.mse * (I - H))
 
         return variance_covariance_residual_matrix
@@ -92,7 +93,7 @@ class LinearModel(BaseModel):
         predicted_y = self.IV @ self.CoefResults.betas     # predicted y values
         residuals = self.DV - predicted_y                   # Calculation of residuals (error)
 
-        J = self._j_matrix()                  # Creating the J matrix
+        J = self.j_matrix()                  # Creating the J matrix
 
         ### Sum of Squares
         # Total sum of squares (SSTO)
