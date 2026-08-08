@@ -23,8 +23,18 @@ class GeneralizedLinearModel(BaseModel):
 
     """
 
-    def __init__(self, formula, data=None, conf_level=0.95, family="gaussian", link="identity",
-                 solver_options=None, table_decimals=None, report_as="coef", fit=True, display_summary=True, **kwargs):
+    def __init__(self, formula, data=None, conf_level=0.95,
+                 family="gaussian",
+                 link="identity",
+                 solver_options=None,
+                 table_decimals=None,
+                 report_betas_as="coef",
+                 initial_betas=None,
+                 initial_betas_method="ols",
+                 fit=True,
+                 display_summary=True,
+                 **kwargs):
+
         if data is None: data = {}
 
         #-------------------------------------------------#
@@ -37,7 +47,7 @@ class GeneralizedLinearModel(BaseModel):
                 obj_function="log-likelihood",
                 algorithm="IRLS",
                 tol=1e-7,
-                tolerance=1e-4,
+                tolerance=1e-7,
                 logtolerance=0,
                 max_iter=300,
                 display=True,
@@ -50,10 +60,25 @@ class GeneralizedLinearModel(BaseModel):
             self.SolverOptions = self.SolverOptions.with_overrides(solver_options)
 
 
-        super().__init__(formula=formula, data=data, conf_level=conf_level, family=family, link=link,
-                         solver_options=self.SolverOptions, table_decimals=table_decimals)
+        # -- Resolving coeficient test statistic name --
+        if kwargs.get("test_stat_name", None) is not None and kwargs.get("test_stat_name", None) != '':
+            test_stat_name = kwargs.pop("test_stat_name")
+        else:
+            test_stat_name = "z"
+
+
+        # -- Calling BaseModel initialization method --
+        super().__init__(formula=formula, data=data, conf_level=conf_level,
+                         family=family, link=link,
+                         solver_options=self.SolverOptions,
+                         table_decimals=table_decimals,
+                         test_stat_name=test_stat_name,
+                         **kwargs)
 
         self.__name__ = "Researchpy.GeneralizedLinearModel"
+        self.ModelDesignSpec.model = self.__name__
+        self.ModelDesignSpec.model_display_name = self._get_model_display_name()
+        self.ModelDesignSpec.report_betas_as = report_betas_as
 
         #-------------------------------------------------------------------#
         # -- Initialize an optimization tracker instance for this model. -- #
@@ -63,16 +88,19 @@ class GeneralizedLinearModel(BaseModel):
         self._OptimizationTracker = OptimizationTracker()
 
         if fit:
-            # -- Fit the model
+            # -- Initializing betas --
+            self._initialize_betas(initial_betas=initial_betas, initial_betas_method=initial_betas_method)
+
+            # -- Fit the model --
             self.fit()
 
-            # -- Compute standard errors and statistics
+            # -- Compute standard errors and statistics --
             self._compute_statistics()
 
             # -- Build ModelResults (results() sets self.ModelResults internally)
-            self.results(report_as=report_as, return_type="Dataframe", pretty_format=True)
+            self.results(report_betas_as=report_betas_as, return_type="Dataframe", pretty_format=True)
 
-            # Display the model results summary
+            # -- Display the model results summary --
             if display_summary:
                 self.summary()
 
@@ -165,6 +193,7 @@ class GeneralizedLinearModel(BaseModel):
         if result.success:
             self.CoefResults.betas = result.x.reshape(-1, 1)
             self.FitStatistics.log_likelihood = -result.fun
+            self.FitStatistics.df_residual = self.FitStatistics.n - self.k
 
             # Perform Likelihood Ratio Test (full model vs null)
             lr_test = LikelihoodRatioTest(self, store_null=True, display_summary=False)
@@ -220,21 +249,56 @@ class GeneralizedLinearModel(BaseModel):
         where W = diag(working_weights) and φ is the dispersion parameter
         (φ = 1 for binomial and Poisson; estimated for Gaussian/Gamma).
 
+        For Gaussian family: φ = RSS / (n − k), the mean squared error.
+
         Wald statistic: z = β / SE(β)  [or t for models with estimated dispersion]
+
+        References
+        ----------
+        McCullagh & Nelder (1989), §2.4 — Estimation of the dispersion parameter.
         """
         from scipy.stats import norm, t as t_dist
 
         family = self.ModelDesignSpec.family
         eta = self.IV @ self.CoefResults.betas       # linear predictor
+        mu = family.link_inverse(eta)                # fitted values
         w = family.working_weights(eta).reshape(-1, 1)  # GLM working weights
-        X_w = self.IV * w
 
-        # Fisher information: X'WX; covariance = phi * (X'WX)^{-1}
-        dispersion = getattr(self, '_dispersion', 1.0)
+
+        # ---------------------------------------------------------------
+        # Estimate dispersion parameter φ via the family.
+        # Binomial and Poisson return φ = 1 (known);
+        # Gaussian and Gamma estimate from the Pearson chi-squared statistic:
+        #   φ_hat = Σ[(y - μ)² / V(μ)] / (n - k)
+        # ---------------------------------------------------------------
+        self.FitStatistics.scale_parameter = family.estimate_dispersion(
+            self.DV, mu, self.n, self.k
+        )
+
+        # ---------------------------------------------------------------
+        # Covariance matrix: Cov(β) = φ · (X'WX)^{-1}
+        #
+        # Computed via QR decomposition of the weighted design matrix
+        # for numerical stability (avoids issues with direct inversion
+        # when the information matrix is near-singular):
+        #   X_w = X · √W  →  QR = X_w  →  (X'WX)^{-1} = (R'R)^{-1} = R^{-1} R'^{-1}
+        #
+        # This mirrors the lstsq approach used by the IRLS solver.
+        # ---------------------------------------------------------------
+        dispersion = self.FitStatistics.scale_parameter
+        sqrt_w = np.sqrt(np.clip(w, 1e-15, None))
+        X_weighted = self.IV * sqrt_w  # (n, k) weighted design matrix
+
         try:
-            cov_matrix = dispersion * np.linalg.inv(self.IV.T @ X_w)
+            # QR decomposition: X_w = Q @ R, where R is (k, k) upper-triangular
+            Q, R = np.linalg.qr(X_weighted, mode='reduced')
+            # (X'WX)^{-1} = (R'R)^{-1} = R^{-1} @ R'^{-1}
+            R_inv = np.linalg.inv(R)
+            cov_matrix = dispersion * (R_inv @ R_inv.T)
         except np.linalg.LinAlgError:
-            cov_matrix = dispersion * np.linalg.pinv(self.IV.T @ X_w)
+            # Fallback: pseudo-inverse for rank-deficient cases
+            XtWX = self.IV.T @ (self.IV * w)
+            cov_matrix = dispersion * np.linalg.pinv(XtWX)
 
         self.CoefResults.std_error = np.sqrt(np.diag(cov_matrix)).reshape(-1, 1)
 
@@ -242,7 +306,7 @@ class GeneralizedLinearModel(BaseModel):
         self.CoefResults.test_stat = self.CoefResults.betas / self.CoefResults.std_error
 
         # P-values: z-test for known dispersion, t-test for estimated
-        if self._test_stat_name == "t":
+        if self.CoefResults.test_stat_name == "t":
             dof = self.n - self.k
             self.CoefResults.test_pval = 2 * t_dist.sf(np.abs(self.CoefResults.test_stat), df=dof)
             self._confidence_interval(distribution_name="t", dof=dof)
@@ -396,7 +460,7 @@ class GeneralizedLinearModel(BaseModel):
         return self.ModelResults
 
 
-    def results(self, report_as="coef", return_type="Dataframe", pretty_format=True,
+    def results(self, report_betas_as="coef", return_type="Dataframe", pretty_format=True,
                 table_decimals=None, **kwargs
                 ):
         """
@@ -404,7 +468,7 @@ class GeneralizedLinearModel(BaseModel):
 
         Parameters
         ----------
-        report_as : str, optional
+        report_betas_as : str, optional
             ``"or"`` for odds ratios (default), ``"coef"`` for raw log-odds.
         return_type : str, optional
             ``"Dataframe"`` (default) or ``"Dictionary"``.
@@ -436,8 +500,8 @@ class GeneralizedLinearModel(BaseModel):
         if table_decimals is not None:
             self._table_decimals = self._table_decimals | table_decimals
 
-        # Determine the coefficient transform based on report_as
-        if report_as.lower() in ["or", "odds ratio", "odds_ratio"]:
+        # Determine the coefficient transform based on report_betas_as
+        if report_betas_as.lower() in ["or", "odds ratio", "odds_ratio"]:
             transform = np.exp
             self._beta_type = "odds ratio"
         else:

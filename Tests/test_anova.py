@@ -356,6 +356,7 @@ class TestAnovaRegressionTable:
     """Validate anova.regression_table() against golden values."""
 
     @pytest.fixture(scope="class")
+    @classmethod
     def reg_table(self, anova_model_type3):
         """Get regression table as DataFrame."""
         return anova_model_type3.regression_table(return_type="Dataframe", decimals=4)

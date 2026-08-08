@@ -79,11 +79,11 @@ def patsy_column_cleaner(factor):
 def patsy_term_cleaner(factor):
     """Thin backward-compatible wrapper.
 
-    Delegates to :func:`researchpy.core.syntax_engine.clean_term_name`.
-    New code should import ``clean_term_name`` directly.
+    Delegates to :meth:`researchpy.containers.multivariable.Term.clean_term_name`.
+    New code should use ``Term.clean_term_name`` directly.
     """
-    from researchpy.core.syntax_engine import clean_term_name
-    return clean_term_name(factor)
+    from researchpy.containers.multivariable import Term
+    return Term.clean_term_name(factor)
 
 
 
@@ -153,9 +153,8 @@ def base_table(high_level_term_info, mapping_info, info_terms, reg_table):
     table = pd.merge(table, current_terms,
                      how="left", on=["term_cleaned", "term_level_cleaned"])
 
-    table = pd.merge(table, pd.DataFrame.from_dict(reg_table),
-                     how="left", on=dv)
-    #table = pandas.merge(table, pd.DataFrame.from_dict(reg_table).astype(object), how="left", on=dv)  # From dev3.7.1
+    #table = pd.merge(table, pd.DataFrame.from_dict(reg_table), how="left", on=dv)
+    table = pd.merge(table, pd.DataFrame.from_dict(reg_table).astype(object), how="left", on=dv)  # From dev3.7.1
 
     # Cleaning up final table #
     table[dv] = table["term_level_cleaned"]
@@ -163,10 +162,10 @@ def base_table(high_level_term_info, mapping_info, info_terms, reg_table):
     for idx in table.index:
         if pd.isnull(table.iloc[idx, 6]) and table.iloc[idx][dv] not in list(info_terms.keys())[1:]:
             table.iloc[idx, 6] = "(reference)"
-            table.iloc[idx, 7:] = np.nan            # used to be = ""
+            table.iloc[idx, 7:] = ""
         else:
             if table.iloc[idx][dv] in list(info_terms.keys())[1:] and pd.isnull(table.iloc[idx, 6]):
-                table.iloc[idx, 6:] = np.nan        # used to be = ""
+                table.iloc[idx, 6:] = ""
 
     table = table[(table.intx == 0) | ((table.intx == 1) & (table.iloc[:, 6] != "(reference)"))]
 

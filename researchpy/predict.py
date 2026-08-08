@@ -1,10 +1,15 @@
-import numpy as np
+
+import numpy
 import scipy.stats
 import patsy
 import pandas
 
+from .summary import summarize
+from .model import model
+from .utility import *
 
-def predict_y(mdl_data, trans=None):
+
+def predict_y(mdl_data):
     """
 
 
@@ -19,17 +24,9 @@ def predict_y(mdl_data, trans=None):
         Returns an array containing the linear prediction.
 
     """
-
-    if trans is None:
-        y_e = mdl_data.IV @ mdl_data.CoefResults.betas
-
-    else:
-        y_e = trans(mdl_data.IV @ mdl_data.CoefResults.betas) / \
-              (1 + trans(mdl_data.IV @ mdl_data.CoefResults.betas))
-
-        # linear_pred mdl_data.IV @ mdl_data.CoefResults.betas
-        # y_e = 1 / (1 + np.exp(-linear_pred))
-
+    
+    y_e = mdl_data.IV @ mdl_data.model_data["betas"]
+    
     return y_e
 
 
@@ -48,20 +45,10 @@ def residuals(mdl_data):
         Returns an array containing the residuals.
 
     """
-    predicted_y = mdl_data.IV @ mdl_data.CoefResults.betas
+    predicted_y = mdl_data.IV @ mdl_data.model_data["betas"]
     resids = mdl_data.DV - predicted_y
     
     return resids
-
-
-def _compute_hat_matrix(mdl_data):
-    """Compute the hat matrix H = X(X'X)^{-1}X' on-the-fly."""
-    x = np.asarray(mdl_data.IV)
-    try:
-        H = x @ np.linalg.inv(x.T @ x) @ x.T
-    except np.linalg.LinAlgError:
-        H = x @ np.linalg.pinv(x.T @ x) @ x.T
-    return H
 
 
 def standardized_residuals(mdl_data):
@@ -81,11 +68,10 @@ def standardized_residuals(mdl_data):
     """
     resids = residuals(mdl_data)
 
-    H = _compute_hat_matrix(mdl_data)
-    std_e = np.sqrt(
-        (mdl_data.ModelEffects.mse * (1 - np.diag(H))))
+    std_e = numpy.sqrt(
+        (mdl_data.model_data["mse"] * (1 - numpy.diag(mdl_data.model_data["H"]))))
 
-    t = resids / np.reshape(std_e, (mdl_data.n, 1))
+    t = resids / numpy.reshape(std_e, (mdl_data.nobs, 1))
 
     return t
 
@@ -109,18 +95,18 @@ def studentized_residuals(mdl_data):
     d = []
 
     resid_standardized = standardized_residuals(mdl_data)
-    n = mdl_data.n
+    n = mdl_data.nobs
     k = len(mdl_data._IV_design_info.column_names) - 1
 
     for i in range(0, n):
 
         r_i = resid_standardized[i]
 
-        t_i = r_i * np.sqrt(((n - k - 2) / (n - k - 1 - r_i**2)))
+        t_i = r_i * numpy.sqrt(((n - k - 2) / (n - k - 1 - r_i**2)))
 
-        d.append(float(t_i))
+        d.append(t_i)
 
-    d = np.array(d).reshape(n, 1)
+    d = numpy.array(d).reshape(n, 1) 
 
     return d
 
@@ -141,13 +127,12 @@ def leverage(mdl_data):
 
     """
 
-    H = _compute_hat_matrix(mdl_data)
-    lev = np.diag(H).reshape(mdl_data.n, 1)
+    lev = numpy.diag(mdl_data.model_data['H']).reshape(mdl_data.nobs, 1)
 
     return lev
 
 
-def predict(mdl_data, estimate=None, trans=None, decimals=4):
+def predict(mdl_data={}, estimate=None, decimals=4):
     """
 
 
@@ -175,7 +160,7 @@ def predict(mdl_data, estimate=None, trans=None, decimals=4):
         return print("\n", "ERROR: estimate option provided is not supported. Please use help(predict) for supported options.")
 
     if estimate in ["y", "xb"]:
-        est = predict_y(mdl_data, trans=trans)
+        est = predict_y(mdl_data)
         return est.round(decimals)
 
     elif estimate in ["residuals", "res", "r"]:

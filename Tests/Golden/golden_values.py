@@ -19,6 +19,65 @@ Source datasets loaded from: researchpy.Tests.stata_datasets
   - lbw:      189 obs x 11 vars
 """
 
+# ═══════════════════════════════════════════════════════════════════════════
+# GOLDEN METADATA
+# ═══════════════════════════════════════════════════════════════════════════
+
+GOLDEN_METADATA = {
+    "schema_version": "1.0",
+    "last_updated": "2026-08-07",
+    "datasets": {
+        "auto": {
+            "source_software": "Stata",
+            "source_dataset": "auto.dta (74 obs x 12 vars)",
+            "source_url": "https://www.stata-press.com/data/r19/auto.dta",
+            "documentation_url": "https://researchpy.readthedocs.io/en/latest/summarize_documentation.html",
+            "transcribed_by": "Corey Bryant",
+            "last_verified": "2026-08-07",
+            "golden_version": "1.0",
+            "coverage": ["summarize", "summary_cat"],
+        },
+        "systolic": {
+            "source_software": "Stata",
+            "source_dataset": "systolic.dta (58 obs x 3 vars)",
+            "source_url": "https://www.stata-press.com/data/r19/systolic.dta",
+            "documentation_url": "https://researchpy.readthedocs.io/en/latest/anova_documentation.html",
+            "transcribed_by": "Corey Bryant",
+            "last_verified": "2026-08-07",
+            "golden_version": "1.0",
+            "coverage": ["summarize", "summary_cat", "crosstab", "anova", "ols", "regression"],
+        },
+        "lbw": {
+            "source_software": "Stata",
+            "source_dataset": "lbw.dta (189 obs x 11 vars)",
+            "source_url": "https://www.stata-press.com/data/r19/lbw.dta",
+            "documentation_url": None,
+            "transcribed_by": None,
+            "last_verified": None,
+            "golden_version": None,
+            "coverage": [],
+            "notes": "No golden values yet; candidate for logistic regression testing",
+        },
+        "glm-reg": {
+            "source_software": "Stata",
+            "source_dataset": "glm-reg.dta (500 obs x 5 vars)",
+            "source_url": "https://academicweb.nd.edu/~rwilliam/statafiles/glm-reg.dta",
+            "documentation_url": "https://academicweb.nd.edu/~rwilliam/stats3/L01.pdf",
+            "transcribed_by": "Corey Bryant",
+            "last_verified": "2026-08-08",
+            "golden_version": "1.0",
+            "coverage": ["glm"],
+            "notes": "No golden values yet; candidate for testing GLM regression with a gaussian family and identity link ",
+        },
+    },
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DEFAULT TOLERANCES
+# ═══════════════════════════════════════════════════════════════════════════
+
+
 # Default tolerance for pytest.approx() comparisons.
 # Doc values are rounded to 4 decimal places, so this gives a reasonable
 # cushion for floating-point differences while catching real bugs.
@@ -468,6 +527,70 @@ SYSTOLIC_REGRESSION_TABLE = [
 ]
 
 
+# -- GLM-REG: fit statistics ------------------------------------------------------
+GLM_REG_FIT = {
+    "n": 500,
+    "df_residual": 496,
+    "scale_parameter": 14.06208,
+    "deviance": 6974.790467,
+    "pearson": 6974.790467,
+    "log_likelihood": -1368.331633,
+    "aic": 5.489327,
+    "bic": 3892.345,
+}
+
+# -- GLM-REG: regression table ---------------------------------------------------
+GLM_REG_REGRESSION_TABLE = [
+    {
+        "term": "educ",
+        "Coef.": 1.840407,
+        "Std. Err.": 0.0467507,
+        "z": 39.37,
+        "p-value": 0.000,
+        "95% Conf. Interval": (1.748777, 1.932036),
+    },
+    {
+        "term": "jobexp",
+        "Coef.": 0.6514259,
+        "Std. Err.": 0.0350604,
+        "z": 18.58,
+        "p-value": 0.000,
+        "95% Conf. Interval": (0.5827087, 0.7201431),
+    },
+    {
+        'term': 'black',
+        'Coef.': '',
+        'Std. Err.': '',
+        'z': '',
+        'p-value': '',
+        '95% Conf. Interval': ''
+    },
+    {
+        'term': 'white',
+        'Coef.': '(reference)',
+        'Std. Err.': '',
+        'z': '',
+        'p-value': '',
+        '95% Conf. Interval': ''
+    },
+    {
+        "term": "black",
+        "Coef.": -2.55136,
+        "Std. Err.": 0.4736266,
+        "z": -5.39,
+        "p-value": 0.000,
+        "95% Conf. Interval": (-3.479651, -1.623069),
+    },
+    {
+        "term": "Intercept",
+        "Coef.": -4.72676,
+        "Std. Err.": 0.9236842,
+        "z": -5.12,
+        "p-value": 0.000,
+        "95% Conf. Interval": (-6.537147, -2.916372),
+    },
+]
+
 # ═══════════════════════════════════════════════════════════════════════════
 # HELPER FUNCTIONS
 # ═══════════════════════════════════════════════════════════════════════════
@@ -563,3 +686,46 @@ def get_systolic_golden(category, row_key=None):
 
 
 
+def get_glm_reg_golden(category, row_key=None):
+    """
+    Retrieve golden values for the glm-reg dataset by category.
+
+    Parameters
+    ----------
+    category : str
+        One of: 'summarize', 'crosstab', 'anova_table', 'anova_fit',
+        'regression_table'
+    row_key : str, optional
+        For model_fit: source name ('Model', 'drug', 'disease',
+        'drug:disease', 'Residual', 'Total')
+        For crosstab: variable name ('drug', 'disease')
+
+    Returns
+    -------
+    dict or list
+        Expected values for the specified category/row
+
+    Examples
+    --------
+    >>> get_glm_reg_golden('summarize')
+    {'N': 58, 'Mean': 18.8793, ...}
+
+    >>> get_glm_reg_golden('model_fit', row_key='log_likelihood')
+    {"n": 500, "df_residual": 496, "scale_parameter": 14.06208, "deviance": 6974.790467,
+    "pearson": 6974.790467, "log_likelihood": -1368.331633, "aic": 5.489327, "bic": 3892.345,}
+    """
+    _LOOKUP = {
+        #'summarize': GLM_REG_SUMMARIZE,
+        #'summary_cat': GLM_REG_SUMMARY_CAT,
+        #'crosstab': GLM_REG_CROSSTAB,
+        #'anova_table': GLM_REG_ANOVA_TABLE,
+        'model_fit': GLM_REG_FIT,
+        'regression_table': GLM_REG_REGRESSION_TABLE,
+    }
+
+    data = _LOOKUP[category]
+
+    if row_key is not None:
+        data = data[row_key]
+
+    return data

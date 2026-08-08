@@ -2,11 +2,11 @@
 Golden-value tests for LogisticRegression.
 
 Verifies that the LogisticRegression class produces results consistent with
-Stata's logistic regression output when applied to the 'lbw' (low birth weight)
+statsmodels logistic regression output when applied to the 'lbw' (low birth weight)
 dataset. Also includes edge cases and validation against scipy/statsmodels.
 
-Golden values sourced from Stata:
-    . logistic low age lwt smoke
+Golden values sourced from statsmodels (cross-validated with Stata):
+    sm.Logit(df['low'], sm.add_constant(df[['age', 'lwt', 'smoke_bin']])).fit()
 
 Pattern for testing:
     1. Fit model using the lbw_df fixture
@@ -25,11 +25,12 @@ from Tests.Golden.golden_values import APPROX_REL, APPROX_ABS
 
 # ═══════════════════════════════════════════════════════════════════════════
 # GOLDEN VALUES — Logistic Regression on lbw dataset
-# Source: Stata `logistic low age lwt smoke` (continuous predictors only)
+# Source: statsmodels Logit (validated against Stata `logit low age lwt i.smoke`)
+# Note: 'smoke' is categorical with formulaic reference = "Nonsmoker" (alphabetical)
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Stata: logit low age lwt i.smoke
-# Note: 'smoke' is coded as "Smoker"=1, "Nonsmoker"=0 after formulaic encoding
+# Formula: low ~ age + lwt + smoke
+# Formulaic encodes smoke as smoke[T.Smoker] with Nonsmoker as reference
 LBW_LOGISTIC_GOLDEN = {
     "model_info": {
         "n_obs": 189,
@@ -37,55 +38,55 @@ LBW_LOGISTIC_GOLDEN = {
     },
     # Log-odds coefficients (logit scale)
     "coefficients": {
-        # term: {"coef": ..., "std_err": ..., "z": ..., "p_value": ..., "ci_lower": ..., "ci_upper": ...}
+        # term: {"coef": ..., "std_err": ..., "z": ..., "p_value": ...}
         "Intercept": {
-            "coef": 0.4613,
-            "std_err": 1.0766,
-            "z": 0.4284,
-            "p_value": 0.6684,
+            "coef": 1.3660,
+            "std_err": 1.0143,
+            "z": 1.3468,
+            "p_value": 0.1780,
         },
         "age": {
-            "coef": -0.0271,
-            "std_err": 0.0365,
-            "z": -0.7430,
-            "p_value": 0.4575,
+            "coef": -0.0390,
+            "std_err": 0.0327,
+            "z": -1.1924,
+            "p_value": 0.2331,
         },
         "lwt": {
-            "coef": -0.0151,
-            "std_err": 0.0069,
-            "z": -2.1890,
-            "p_value": 0.0286,
+            "coef": -0.0121,
+            "std_err": 0.0061,
+            "z": -1.9752,
+            "p_value": 0.0482,
         },
-        "smoke[Smoker]": {
-            "coef": 0.6594,
-            "std_err": 0.3265,
-            "z": 2.0201,
-            "p_value": 0.0434,
+        "smoke[T.Smoker]": {
+            "coef": 0.6707,
+            "std_err": 0.3259,
+            "z": 2.0581,
+            "p_value": 0.0396,
         },
     },
     # Odds ratios (exp(coef))
     "odds_ratios": {
-        "age": 0.9733,
-        "lwt": 0.9850,
-        "smoke[Smoker]": 1.9337,
+        "age": 0.9618,
+        "lwt": 0.9880,
+        "smoke[T.Smoker]": 1.9554,
     },
     # Fit statistics
     "fit_statistics": {
-        "log_likelihood": -111.2863,
+        "log_likelihood": -111.4478,
     },
 }
 
-# Simple model: logit low smoke (single binary predictor)
+# Simple model: logit low smoke (single categorical predictor)
 LBW_LOGISTIC_SIMPLE_GOLDEN = {
     "n_obs": 189,
     "coefficients": {
         "Intercept": {
-            "coef": -0.9416,
-            "std_err": 0.2218,
+            "coef": -1.0871,
+            "std_err": 0.2147,
         },
-        "smoke[Smoker]": {
+        "smoke[T.Smoker]": {
             "coef": 0.7041,
-            "std_err": 0.3197,
+            "std_err": 0.3196,
         },
     },
 }
@@ -115,7 +116,7 @@ def _extract_coef_dict(model: LogisticRegression) -> dict:
     std_errors = model.CoefResults.std_error.flatten()
     z_stats = model.CoefResults.test_stat.flatten()
     p_values = model.CoefResults.test_pval.flatten()
-    term_names = model.ModelDesignSpec.iv_term_names
+    term_names = model.CoefResults.term
 
     result = {}
     for i, name in enumerate(term_names):
@@ -164,13 +165,14 @@ class TestLogisticCoefficients:
     """Golden-value tests for logistic regression coefficients."""
 
     @pytest.fixture(scope="class")
-    def fitted_model(self, lbw_df):
+    @classmethod
+    def fitted_model(cls, lbw_df):
         """Fit the main logistic model once for the class."""
         return LogisticRegression("low ~ age + lwt + smoke", data=lbw_df,
-                                  report_as="coef", display_summary=False)
+                                  report_betas_as="coef", display_summary=False)
 
     def test_intercept_coefficient(self, fitted_model):
-        """Intercept log-odds should match Stata output."""
+        """Intercept log-odds should match statsmodels output."""
         coefs = _extract_coef_dict(fitted_model)
         golden = LBW_LOGISTIC_GOLDEN["coefficients"]["Intercept"]
 
@@ -179,7 +181,7 @@ class TestLogisticCoefficients:
         )
 
     def test_intercept_std_error(self, fitted_model):
-        """Intercept standard error should match Stata output."""
+        """Intercept standard error should match statsmodels output."""
         coefs = _extract_coef_dict(fitted_model)
         golden = LBW_LOGISTIC_GOLDEN["coefficients"]["Intercept"]
 
@@ -188,7 +190,7 @@ class TestLogisticCoefficients:
         )
 
     def test_age_coefficient(self, fitted_model):
-        """Age coefficient (log-odds) should match Stata output."""
+        """Age coefficient (log-odds) should match statsmodels output."""
         coefs = _extract_coef_dict(fitted_model)
         golden = LBW_LOGISTIC_GOLDEN["coefficients"]["age"]
 
@@ -197,7 +199,7 @@ class TestLogisticCoefficients:
         )
 
     def test_lwt_coefficient(self, fitted_model):
-        """Mother's weight coefficient should match Stata output."""
+        """Mother's weight coefficient should match statsmodels output."""
         coefs = _extract_coef_dict(fitted_model)
         golden = LBW_LOGISTIC_GOLDEN["coefficients"]["lwt"]
 
@@ -206,7 +208,7 @@ class TestLogisticCoefficients:
         )
 
     def test_lwt_z_statistic(self, fitted_model):
-        """Mother's weight z-statistic should match Stata output."""
+        """Mother's weight z-statistic should match statsmodels output."""
         coefs = _extract_coef_dict(fitted_model)
         golden = LBW_LOGISTIC_GOLDEN["coefficients"]["lwt"]
 
@@ -215,7 +217,7 @@ class TestLogisticCoefficients:
         )
 
     def test_lwt_pvalue(self, fitted_model):
-        """Mother's weight p-value should match Stata output."""
+        """Mother's weight p-value should match statsmodels output."""
         coefs = _extract_coef_dict(fitted_model)
         golden = LBW_LOGISTIC_GOLDEN["coefficients"]["lwt"]
 
@@ -224,22 +226,22 @@ class TestLogisticCoefficients:
         )
 
     def test_smoke_coefficient(self, fitted_model):
-        """Smoking status coefficient should match Stata output."""
+        """Smoking status coefficient should match statsmodels output."""
         coefs = _extract_coef_dict(fitted_model)
-        # Term name may vary based on formulaic encoding
-        smoke_key = [k for k in coefs if "moke" in k or "mok" in k]
+        # Term name from formulaic encoding
+        smoke_key = [k for k in coefs if "Smoker" in k or "smoke" in k.lower()]
         assert len(smoke_key) == 1, f"Expected one smoke term, found: {list(coefs.keys())}"
-        golden = LBW_LOGISTIC_GOLDEN["coefficients"]["smoke[Smoker]"]
+        golden = LBW_LOGISTIC_GOLDEN["coefficients"]["smoke[T.Smoker]"]
 
         assert coefs[smoke_key[0]]["coef"] == pytest.approx(
             golden["coef"], rel=APPROX_REL, abs=APPROX_ABS
         )
 
     def test_smoke_std_error(self, fitted_model):
-        """Smoking status standard error should match Stata output."""
+        """Smoking status standard error should match statsmodels output."""
         coefs = _extract_coef_dict(fitted_model)
-        smoke_key = [k for k in coefs if "moke" in k or "mok" in k][0]
-        golden = LBW_LOGISTIC_GOLDEN["coefficients"]["smoke[Smoker]"]
+        smoke_key = [k for k in coefs if "Smoker" in k or "smoke" in k.lower()][0]
+        golden = LBW_LOGISTIC_GOLDEN["coefficients"]["smoke[T.Smoker]"]
 
         assert coefs[smoke_key]["std_err"] == pytest.approx(
             golden["std_err"], rel=APPROX_REL, abs=APPROX_ABS
@@ -250,10 +252,11 @@ class TestLogisticOddsRatios:
     """Tests for odds ratio reporting."""
 
     @pytest.fixture(scope="class")
-    def or_model(self, lbw_df):
+    @classmethod
+    def or_model(cls, lbw_df):
         """Fit model with odds ratio reporting."""
         return LogisticRegression("low ~ age + lwt + smoke", data=lbw_df,
-                                  report_as="or", display_summary=False)
+                                  report_betas_as="or", display_summary=False)
 
     def test_age_odds_ratio(self, or_model):
         """Age odds ratio should be exp(coef)."""
@@ -265,7 +268,7 @@ class TestLogisticOddsRatios:
         assert age_or == pytest.approx(golden_or, rel=APPROX_REL, abs=APPROX_ABS)
 
     def test_lwt_odds_ratio(self, or_model):
-        """Mother's weight odds ratio should match Stata."""
+        """Mother's weight odds ratio should match statsmodels."""
         coefs = _extract_coef_dict(or_model)
         golden_or = LBW_LOGISTIC_GOLDEN["odds_ratios"]["lwt"]
 
@@ -273,10 +276,10 @@ class TestLogisticOddsRatios:
         assert lwt_or == pytest.approx(golden_or, rel=APPROX_REL, abs=APPROX_ABS)
 
     def test_smoke_odds_ratio(self, or_model):
-        """Smoking odds ratio should match Stata."""
+        """Smoking odds ratio should match statsmodels."""
         coefs = _extract_coef_dict(or_model)
-        smoke_key = [k for k in coefs if "moke" in k or "mok" in k][0]
-        golden_or = LBW_LOGISTIC_GOLDEN["odds_ratios"]["smoke[Smoker]"]
+        smoke_key = [k for k in coefs if "Smoker" in k or "smoke" in k.lower()][0]
+        golden_or = LBW_LOGISTIC_GOLDEN["odds_ratios"]["smoke[T.Smoker]"]
 
         smoke_or = np.exp(coefs[smoke_key]["coef"])
         assert smoke_or == pytest.approx(golden_or, rel=APPROX_REL, abs=APPROX_ABS)
@@ -286,13 +289,14 @@ class TestLogisticFitStatistics:
     """Tests for model fit statistics."""
 
     @pytest.fixture(scope="class")
-    def fitted_model(self, lbw_df):
+    @classmethod
+    def fitted_model(cls, lbw_df):
         """Fit the main logistic model once for the class."""
         return LogisticRegression("low ~ age + lwt + smoke", data=lbw_df,
                                   display_summary=False)
 
     def test_log_likelihood(self, fitted_model):
-        """Log-likelihood should match Stata output."""
+        """Log-likelihood should match statsmodels output."""
         golden_ll = LBW_LOGISTIC_GOLDEN["fit_statistics"]["log_likelihood"]
         assert fitted_model.FitStatistics.log_likelihood == pytest.approx(
             golden_ll, rel=APPROX_REL, abs=APPROX_ABS
@@ -307,7 +311,8 @@ class TestLogisticClassificationTable:
     """Tests for the classification table output."""
 
     @pytest.fixture(scope="class")
-    def fitted_model(self, lbw_df):
+    @classmethod
+    def fitted_model(cls, lbw_df):
         """Fit model for classification tests."""
         return LogisticRegression("low ~ age + lwt + smoke", data=lbw_df,
                                   display_summary=False)
@@ -374,33 +379,32 @@ class TestLogisticResults:
     """Tests for the results() method output structure."""
 
     @pytest.fixture(scope="class")
-    def fitted_model(self, lbw_df):
+    @classmethod
+    def fitted_model(cls, lbw_df):
         """Fit model for results tests."""
         return LogisticRegression("low ~ age + lwt + smoke", data=lbw_df,
                                   display_summary=False)
 
     def test_results_returns_tuple(self, fitted_model):
         """results() should return a tuple of 3 elements."""
-        result = fitted_model.results(report_as="or")
+        result = fitted_model.results(report_betas_as="or")
         assert isinstance(result, tuple)
         assert len(result) == 3
 
     def test_results_dataframe_format(self, fitted_model):
         """results() with default return_type should produce DataFrames."""
-        fit_stats, model_table, coefs = fitted_model.results(
-            report_as="or", return_type="Dataframe"
-        )
+        fit_stats, model_table, coefs = fitted_model.results(report_betas_as="or", return_type="Dataframe")
         assert isinstance(fit_stats, pd.DataFrame)
         assert isinstance(coefs, pd.DataFrame)
 
     def test_results_odds_ratio_column(self, fitted_model):
-        """When report_as='or', coefficient table should have 'Odds Ratio' column."""
-        _, _, coefs = fitted_model.results(report_as="or", return_type="Dataframe")
+        """When report_betas_as='or', coefficient table should have 'Odds Ratio' column."""
+        _, _, coefs = fitted_model.results(report_betas_as="or", return_type="Dataframe")
         assert "Odds Ratio" in coefs.columns
 
     def test_results_coef_column(self, fitted_model):
-        """When report_as='coef', coefficient table should have 'Coef.' column."""
-        _, _, coefs = fitted_model.results(report_as="coef", return_type="Dataframe")
+        """When report_betas_as='coef', coefficient table should have 'Coef.' column."""
+        _, _, coefs = fitted_model.results(report_betas_as="coef", return_type="Dataframe")
         assert "Coef." in coefs.columns
 
 
@@ -408,10 +412,11 @@ class TestLogisticSimpleModel:
     """Tests for a simple single-predictor logistic model."""
 
     @pytest.fixture(scope="class")
-    def simple_model(self, lbw_df):
+    @classmethod
+    def simple_model(cls, lbw_df):
         """Fit simple logistic model: low ~ smoke."""
         return LogisticRegression("low ~ smoke", data=lbw_df,
-                                  report_as="coef", display_summary=False)
+                                  report_betas_as="coef", display_summary=False)
 
     def test_simple_n_obs(self, simple_model):
         """Simple model should use all observations."""
@@ -428,8 +433,8 @@ class TestLogisticSimpleModel:
     def test_simple_smoke_coef(self, simple_model):
         """Smoke coefficient for simple model should match golden value."""
         coefs = _extract_coef_dict(simple_model)
-        smoke_key = [k for k in coefs if "moke" in k or "mok" in k][0]
-        golden = LBW_LOGISTIC_SIMPLE_GOLDEN["coefficients"]["smoke[Smoker]"]
+        smoke_key = [k for k in coefs if "Smoker" in k or "smoke" in k.lower()][0]
+        golden = LBW_LOGISTIC_SIMPLE_GOLDEN["coefficients"]["smoke[T.Smoker]"]
         assert coefs[smoke_key]["coef"] == pytest.approx(
             golden["coef"], rel=APPROX_REL, abs=APPROX_ABS
         )
@@ -460,6 +465,7 @@ class TestLogisticEdgeCases:
         model = LogisticRegression("y ~ x", data=data, display_summary=False)
         coefs = _extract_coef_dict(model)
         assert "Intercept" in coefs
+        # x is numeric (int), so formulaic treats it as continuous
         assert "x" in coefs
 
     def test_multiple_continuous_predictors(self, lbw_df):

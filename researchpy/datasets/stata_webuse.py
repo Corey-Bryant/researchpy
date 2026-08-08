@@ -50,7 +50,7 @@ _COMMON_DATASETS = {
 }
 
 
-def fetch_dta(name: str, version: Optional[str] = None, timeout: int = 30) -> pd.DataFrame:
+def fetch_dta(name: str, version: Optional[str] = None, url: Optional[str] = None, timeout: int = 30) -> pd.DataFrame:
     """
     Fetch a dataset directly from Stata Press web repository.
 
@@ -60,6 +60,8 @@ def fetch_dta(name: str, version: Optional[str] = None, timeout: int = 30) -> pd
         Dataset filename without extension (e.g., 'auto', 'nlsw88')
     version : str, optional
         Stata version directory (e.g., 'r19', 'r18'). Defaults to 'r19'.
+    url : str, optional
+        Custom base URL for dataset retrieval. If provided, overrides version. Defaults to None.
     force_download : bool, default False
         If True, re-download even if available locally
     timeout : int, default 30
@@ -91,17 +93,25 @@ def fetch_dta(name: str, version: Optional[str] = None, timeout: int = 30) -> pd
     >>>
     >>> # Force refresh from server
     >>> df_new = rp.datasets.stata_webuse.fetch_dta('auto',force_download=True)
+    >>>
+    >>> # Get Stata dataset from custom URL
+    >>> df_cust = rp.datasets.stata_webuse.fetch_dta('glm-reg', url='https://academicweb.nd.edu/~rwilliam/statafiles/')
+    >>> print(df_cust.shape)
+    (500, 5)
     """
     if version is None:
         version = _DEFAULT_VERSION
 
     if version not in _STATA_BASE_URLS:
         raise ValueError(
-            f"Unsupported version '{version}'. Supported versions: "
-            f"{', '.join(_STATA_BASE_URLS.keys())}"
+                f"Unsupported version '{version}'. Supported versions: "
+                f"{', '.join(_STATA_BASE_URLS.keys())}"
         )
 
-    base_url = _STATA_BASE_URLS[version]
+    if url is not None:
+        base_url = url
+    else:
+        base_url = _STATA_BASE_URLS[version]
     url = f"{base_url}{name}.dta"
 
     try:
@@ -114,8 +124,8 @@ def fetch_dta(name: str, version: Optional[str] = None, timeout: int = 30) -> pd
     except requests.HTTPError as e:
         if e.response.status_code == 404:
             raise ValueError(
-                f"Dataset '{name}' not found at version {version}. "
-                f"Check spelling or try different version."
+                    f"Dataset '{name}' not found at version {version}. "
+                    f"Check spelling or try different version."
             ) from e
         raise ConnectionError(f"Failed to download dataset: {e}") from e
 

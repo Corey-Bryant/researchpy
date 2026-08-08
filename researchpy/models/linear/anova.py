@@ -318,7 +318,6 @@ class Anova(LinearModel):
         if data is None:
             data = {}
 
-        self._test_stat_name = "t"
         self._CI_LEVEL = conf_level
 
         super().__init__(formula=formula, data=data, conf_level=conf_level, table_decimals=table_decimals)

@@ -72,11 +72,11 @@ class Regress(LinearModel):
                  display_summary=True, return_type="Dictionary",
                  na_rep='', pretty_format=True,):
 
-        self._test_stat_name = "t"
-        self.__name__ = "Researchpy.Regress"
-
         super().__init__(formula=formula, data=data, conf_level=conf_level, table_decimals=table_decimals)
 
+
+        # -- Updating ModelDesignSpec and CoefResults dataclasses based on current model --
+        self.__name__ = "Researchpy.Regress"
         self.ModelDesignSpec.model = self.__name__
         self.ModelDesignSpec.model_display_name = self._get_model_display_name()
 

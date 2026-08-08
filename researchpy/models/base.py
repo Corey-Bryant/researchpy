@@ -1,4 +1,3 @@
-#from researchpy.core.matrix_design import DesignMatrix
 from researchpy.engine import DesignMatrix
 
 from researchpy.utility import *
@@ -14,8 +13,8 @@ from researchpy.statistics import _confidence_interval
 
 
 # Base model class for regression models. This class is not meant to be used directly, but rather to be inherited by
-# specific regression model classes (e.g., OLS, Logistic, etc.). It contains common functionality and attributes that
-# are shared across different types of regression models.
+# specific regression model classes (e.g., Regress, Anova, GLM, Logistic, etc.). It contains common functionality and
+# attributes that are shared across different types of regression models.
 class BaseModel(DesignMatrix):
     """
 
@@ -32,71 +31,83 @@ class BaseModel(DesignMatrix):
                  include_intercept: bool = True, ensure_full_rank: bool = True,
                  **kwargs, ):
 
+        # -- Checking parameters and attributes --
         if not hasattr(self, "SolverOptions"):
             raise NotImplementedError(
                     f"{type(self).__name__} must have a self.SolverOptions attribute."
             )
 
 
-        self.__name__ = "Researchpy.BaseModel"
-        self._beta_type = "coef"
-        self.ModelDesignSpec = ModelDesignSpec()
-
-
-        #super().__init__(formula, data, output="numpy", include_intercept=include_intercept,
-        #                 ensure_full_rank=ensure_full_rank, **kwargs, )
-        dm = DesignMatrix.from_formula(formula,
-                                  data,
-                               output="numpy",
-                               include_intercept=include_intercept,
-                               ensure_full_rank=ensure_full_rank,
-                               **kwargs,
-                               )
-        self.DV = dm.DV
-        self.IV = dm.IV
-        self.model_terms = dm.model_terms
-
-        # ModelFit dataclass stores the model design information and fit parameters
-        self.ModelDesignSpec = ModelDesignSpec(
-            formula = dm.formula,
-            model_terms = self.model_terms,
-            family = get_family(family),
-            link = link,
-            solver_options = self.SolverOptions,
-            solver_method = self.SolverOptions.estimation_method,       # Should rename solver_method --> estimation_method
-            ci_level = conf_level,
-        )
-
-        # Model design information
-        if not hasattr(self, "_test_stat_name"):
-            self._test_stat_name = "t" if family == "gaussian" else "z"
-
-        self.n, self.k = self.IV.shape
-
-
-        self.FitStatistics = FitStatistics(
-            n = self.n,
-            k = self.k,
-            test_stat_name = "F"
-        )
-        self.ModelEffects = ModelEffects()
-
-        self.CoefResults = CoefResults()
-        self.CoefResults.term = list(self.model_terms['rhs'].column_map.keys())
-
-
-
-        # Checking to see if the `self._table_decimals` attribute is defined, if it's not then create it.
-        # This is used to specify the number of decimal places to round to for different statistics in the summary table.
         if not hasattr(self, "_table_decimals"):
             self._table_decimals = {
                 "Coef.": 2, "Std. Err.": 3, "test_stat": 4, "test_stat_p": 4, "CI": 2,
                 "Root MSE": 4, "R-squared": 4, "Adj R-squared": 4, "Sum of Squares": 4,
                         'Degrees of Freedom': 1, 'Mean Squares': 4, 'Effect size': 4
             }
-
         if table_decimals is not None:
             self._table_decimals = self._table_decimals | table_decimals
+
+
+
+
+        self.__name__ = "Researchpy.BaseModel"
+        #self._beta_type = "coef"
+
+        # -- Creating the matrix --
+        dm = DesignMatrix.from_formula(
+                formula,
+                data,
+                output="numpy",
+                include_intercept=include_intercept,
+                ensure_full_rank=ensure_full_rank,
+        )
+        self.DV = dm.DV
+        self.IV = dm.IV
+        self.model_terms = dm.model_terms
+        self.n, self.k = self.IV.shape
+
+
+
+
+        # -- Initializing dataclass attributes for BaseModel --
+        #self.ModelDesignSpec = ModelDesignSpec()
+        #self.ModelEffects = ModelEffects()
+        #self.CoefResults = CoefResults()
+
+        # -- Storing the model design information and fit parameters in the ModelDesignSpec dataclass --
+        self.ModelDesignSpec = ModelDesignSpec(
+            formula = dm.formula,
+            model_terms = self.model_terms,
+            family = get_family(family),
+            link = link,
+            solver_options = self.SolverOptions,
+            solver_method = self.SolverOptions.estimation_method,
+            ci_level = conf_level,
+            report_betas_as = kwargs.get("report_betas_as", "coef")
+        )
+
+        # -- Storing initial fit statistics in the FitStatistics dataclass --
+        self.FitStatistics = FitStatistics(
+            n = self.n,
+            k = self.k,
+            test_stat_name = "F"
+        )
+
+        # -- Storing available information in the CoefResults dataclass --
+        self.CoefResults = CoefResults()
+        self.CoefResults.term = list(self.model_terms['rhs'].column_map.keys())
+        self.CoefResults.report_betas_as = kwargs.get("report_betas_as", "coef")
+
+        # -- Resolving the coefficient test-statistic --
+        if kwargs.get("test_stat_name", None) is not None:
+            test_stat_name = kwargs.get("test_stat_name")
+            if test_stat_name not in ["t", "z"]:
+                raise ValueError(f"Invalid test_stat_name: {test_stat_name}. Must be 't' or 'z'.")
+            self.CoefResults.test_stat_name = test_stat_name
+        elif family == "gaussian":
+            self.CoefResults.test_stat_name = "t"
+        else:
+            self.CoefResults.test_stat_name = "z"
 
 
     #---------------------------------------------------------------------------#
@@ -199,7 +210,7 @@ class BaseModel(DesignMatrix):
         # ---- Resolve sources -------------------------------------------------
         dv_name = self.ModelDesignSpec.model_terms['lhs'].terms[0].name
         ci_level = int(self.ModelDesignSpec.ci_level * 100)
-        test_stat_name = self._test_stat_name
+        test_stat_name = self.CoefResults.test_stat_name
 
         # Decimal settings
         d_coef = self._table_decimals.get("Coef.", 2)
@@ -227,18 +238,24 @@ class BaseModel(DesignMatrix):
             ci_lo_raw = self.CoefResults.conf_int_lower[idx]
             ci_hi_raw = self.CoefResults.conf_int_upper[idx]
 
-            # Apply transformation to betas and CIs BEFORE rounding
-            # (SE, test stat, p-value are invariant under monotonic transforms)
+            # Apply transformation to betas, SEs, and CIs BEFORE rounding.
+            # When coef_transform is exp (odds ratios), the delta method gives:
+            #   SE(OR) = OR × SE(β) = exp(β) × SE(β)
+            # The test statistic (z = β/SE(β)) and p-value are invariant
+            # under monotonic transforms and remain on the original scale.
             if coef_transform is not None:
                 beta = np.round(coef_transform(beta_raw), d_coef)
                 ci_lo = np.round(coef_transform(ci_lo_raw), d_ci)
                 ci_hi = np.round(coef_transform(ci_hi_raw), d_ci)
+                # Delta method: SE on transformed scale = |f'(β)| × SE(β)
+                # For exp: SE(OR) = exp(β) × SE(β) = OR × SE(β)
+                se = np.round(coef_transform(beta_raw) * se_raw, d_se)
             else:
                 beta = np.round(beta_raw, d_coef)
                 ci_lo = np.round(ci_lo_raw, d_ci)
                 ci_hi = np.round(ci_hi_raw, d_ci)
+                se = np.round(se_raw, d_se)
 
-            se = np.round(se_raw, d_se)
             ts = np.round(ts_raw, d_ts)
             pv = np.round(pv_raw, d_p)
 
@@ -601,7 +618,7 @@ class BaseModel(DesignMatrix):
         if "Odds Ratio" in table.columns:
             beta_col = "Odds Ratio"
 
-        test_stat_label = self._test_stat_name
+        test_stat_label = self.CoefResults.test_stat_name
         ci_col_name = f"{int(self.ModelDesignSpec.ci_level * 100)}% Conf. Interval"
 
         # ---- Format CI list column into "[lower, upper]" strings --------

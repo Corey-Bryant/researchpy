@@ -87,7 +87,8 @@ __all__ = [
     # Models
     "BaseModel",
     "Regress", "LinearRegression", "LM", "Anova", "ANOVA",
-    "GLM", "GeneralizedLinearModel", "Logistic", "LogisticRegression",
+    "GLM", "GeneralizedLinearModel",
+    "Logistic", "LogisticRegression",
 
     # Statistics subpackage
     "_confidence_interval"

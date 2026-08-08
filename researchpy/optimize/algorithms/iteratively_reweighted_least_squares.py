@@ -15,7 +15,6 @@ from scipy.optimize import OptimizeResult
 
 
 
-
 def IRLS(fun: object, x0: object, args: object = (), **options: object) -> OptimizeResult:
     """Generic Iteratively Reweighted Least-Squares (IRLS) solver.
 
@@ -65,7 +64,7 @@ def IRLS(fun: object, x0: object, args: object = (), **options: object) -> Optim
             or ``(n,)``.  **Required.**
         maxiter : int, optional
             Maximum number of IRLS iterations (default ``100``).
-        tol : float, optional
+        gtol : float, optional
             Convergence tolerance on the change in deviance between
             successive iterations (default ``1e-8``).
         display : bool, optional
@@ -128,7 +127,7 @@ def IRLS(fun: object, x0: object, args: object = (), **options: object) -> Optim
 
     # ---- Unpack optional settings ----
     max_iter: int = options.get("maxiter", 100)
-    tol: float = options.get("tol", 1e-8)
+    gtol: float = options.get("gtol", 1e-8)
     display: bool = options.get("display", False)
 
 
@@ -186,7 +185,7 @@ def IRLS(fun: object, x0: object, args: object = (), **options: object) -> Optim
 
         betas = betas_new
 
-        if deviance_change < tol and iteration > 1:
+        if deviance_change < gtol and iteration > 1:
             converged = True
             if display:
                 print(f"IRLS converged in {iteration} iterations ")

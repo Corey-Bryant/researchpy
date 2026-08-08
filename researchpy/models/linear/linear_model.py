@@ -3,7 +3,7 @@ from pandas import DataFrame
 
 from researchpy.models.base import BaseModel
 from researchpy.optimize import ols_estimation_principal
-from researchpy.containers import ModelResults, FactorEffects, SolverOptions
+from researchpy.containers import ModelResults, ModelEffects, FactorEffects, SolverOptions, Term
 from researchpy.utility import *
 
 
@@ -14,34 +14,39 @@ class LinearModel(BaseModel):
 
     """
 
-    def __init__(self, formula, data=None, conf_level=0.95, table_decimals=None):
+    def __init__(self, formula, data=None, conf_level=0.95, table_decimals=None, fit=True,):
 
         if data is None:  data = {}
+        self.ModelEffects = ModelEffects()
         self.FactorEffects = FactorEffects()
-        self.SolverOptions = SolverOptions(estimation_method="ols",
-                                           obj_function="ssr",
-                                           algorithm=None,)
+        self.SolverOptions = SolverOptions(
+                estimation_method="ols",
+                obj_function="ssr",
+                algorithm=None,
+        )
 
         super().__init__(formula=formula, data=data, conf_level=conf_level,
                          family="gaussian", link="normal",
                          solver_options=self.SolverOptions,
-                         table_decimals=table_decimals)
+                         table_decimals=table_decimals,
+                         test_stat_name="t",
+                         )
 
-
+        # -- Updating ModelDesignSpec and CoefResults dataclasses based on current model --
         self.__name__ = "Researchpy.LinearModel"
         self.ModelDesignSpec.model = self.__name__
         self.ModelDesignSpec.model_display_name = self._get_model_display_name()
 
+        if fit:
+            # OLS fit to compute the coefficients (betas) — stored in self.CoefResults.betas
+            self.fit()
 
-        # OLS fit to compute the coefficients (betas) — stored in self.CoefResults.betas
-        self.fit()
+            # Compute the model sum of squares, degrees of freedom, mean squares, F-value, p-value,
+            # and effect size measures — stored in self.ModelEffects
+            self.__model_sum_of_square_stats()
 
-        # Compute the model sum of squares, degrees of freedom, mean squares, F-value, p-value,
-        # and effect size measures — stored in self.ModelEffects
-        self.__model_sum_of_square_stats()
-
-        # Compute standard errors and confidence intervals — stored in self.CoefResults
-        self.__compute_beta_se_and_stats()
+            # Compute standard errors and confidence intervals — stored in self.CoefResults
+            self.__compute_beta_se_and_stats()
 
 
     def fit(self, **kwargs):
@@ -238,7 +243,7 @@ class LinearModel(BaseModel):
 
             for k, col in base_columns_mapping.items():
                 if k == "Source":
-                    middle["Source"] = ([blank] if pretty_format else []) + [patsy_term_cleaner(term) for term in getattr(self.FactorEffects, k.lower())] + ([blank] if pretty_format else [])
+                    middle["Source"] = ([blank] if pretty_format else []) + [Term.clean_term_name(term) for term in getattr(self.FactorEffects, k.lower())] + ([blank] if pretty_format else [])
                 else:
                     dt = getattr(self.FactorEffects, col.lower())
                     middle[col] = ([blank] if pretty_format else []) + rounder(dt, self._table_decimals.get(col, 4), in_place=False) + ([blank] if pretty_format else [])

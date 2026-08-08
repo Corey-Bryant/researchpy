@@ -115,7 +115,7 @@ def studentized_residuals(mdl_data):
 
         t_i = r_i * np.sqrt(((n - k - 2) / (n - k - 1 - r_i**2)))
 
-        d.append(float(t_i))
+        d.append(t_i)
 
     d = np.array(d).reshape(n, 1)
 

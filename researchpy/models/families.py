@@ -265,6 +265,35 @@ class Family(ABC):
 
         return eta + (y - mu) / d
 
+    def estimate_dispersion(self, y: np.ndarray, mu: np.ndarray, n: int, k: int) -> float:
+        """Estimate the dispersion parameter φ.
+
+        For families with known dispersion (Binomial, Poisson), returns 1.0.
+        Families with estimated dispersion (Gaussian, Gamma) override this
+        to compute φ̂ from the Pearson chi-squared statistic.
+
+        Parameters
+        ----------
+        y : np.ndarray
+            Observed response values.
+        mu : np.ndarray
+            Fitted mean values.
+        n : int
+            Number of observations.
+        k : int
+            Number of estimated parameters (including intercept).
+
+        Returns
+        -------
+        float
+            Dispersion parameter φ (1.0 for known-dispersion families).
+
+        References
+        ----------
+        McCullagh & Nelder (1989), §2.4.
+        """
+        return 1.0
+
     def initial_intercept(self, y: np.ndarray) -> float:
         """Smart intercept initialization: g(mean(y)).
 
@@ -461,6 +490,45 @@ class GaussianFamily(Family):
     def dmu_deta(self, eta: np.ndarray) -> np.ndarray:
         """dμ/dη = 1 for the identity link."""
         return np.ones_like(eta)
+
+    def estimate_dispersion(self, y: np.ndarray, mu: np.ndarray, n: int, k: int) -> float:
+        """Estimate the dispersion parameter φ = σ² for the Gaussian family.
+
+        Computed as the Pearson chi-squared statistic divided by the
+        residual degrees of freedom:
+
+            φ̂ = Σ[(yᵢ − μᵢ)² / V(μᵢ)] / (n − k)
+
+        For the Gaussian family V(μ) = 1, so this simplifies to:
+
+            φ̂ = RSS / (n − k)
+
+        which is the familiar mean squared error (MSE).
+
+        Parameters
+        ----------
+        y : np.ndarray
+            Observed response values.
+        mu : np.ndarray
+            Fitted mean values.
+        n : int
+            Number of observations.
+        k : int
+            Number of estimated parameters (including intercept).
+
+        Returns
+        -------
+        float
+            Estimated dispersion (scale) parameter.
+
+        References
+        ----------
+        McCullagh & Nelder (1989), §2.4.
+        """
+        residuals = y - mu
+        variance_mu = self.variance(mu)
+        pearson_chi2 = float(np.sum((residuals ** 2) / variance_mu))
+        return pearson_chi2 / (n - k)
 
     def deviance_residuals(self, y: np.ndarray, mu: np.ndarray) -> np.ndarray:
         """Unit deviance for the Gaussian family: d(y, μ) = (y − μ)²."""

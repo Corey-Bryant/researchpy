@@ -73,6 +73,7 @@ class ModelDesignSpec(CoreDataclass):
     IV: Optional[np.ndarray] = None
     iv_term_names: Optional[list] = None
     ci_level: Optional[float] = 0.95
+    report_betas_as: Optional[str] = "coef"
     # The distribution family and link function
     family: Optional[Family] = None
     model: Optional[str] = None
@@ -164,20 +165,20 @@ class SolverOptions(CoreDataclass):
         # -- Setting default solver algorithm and objective_function options based on estimation method provided -- #
         if self.estimation_method.lower() in ['maximum_likelihood', 'maximum likelihood estimation', 'mle', 'ml']:
             if self.algorithm is None: self.algorithm = 'IRLS'
-            if self.obj_function is None: self.obj_function = 'log-likelihood'
-            self.tol = 1e-4
-            self.tolerance = 1e-4
-            self.logtolerance = 0.0
+            if self.obj_function is None or self.obj_function == '': self.obj_function = 'log-likelihood'
+            #self.tol = 1e-4
+            #self.tolerance = 1e-4
+            #self.logtolerance = 0.0
 
         elif self.estimation_method.lower() in ['ols', 'ordinary least-squares',]:
             if self.algorithm is None:
                 self.algorithm = 'ols'
-            if self.obj_function is None: self.obj_function = 'ssr'
+            if self.obj_function is None or self.obj_function == '': self.obj_function = 'ssr'
 
         elif self.estimation_method.lower() in ['lstsq', 'least-squares', 'least squares']:
             if self.algorithm is None:
                 self.algorithm = 'lstsq'
-            if self.obj_function is None: self.obj_function = 'ssr'
+            if self.obj_function is None or self.obj_function == '': self.obj_function = 'ssr'
 
         else:
             if not hasattr(self, "estimation_method"):
@@ -398,6 +399,7 @@ class CoefResults(CoreDataclass):
 
     term: Optional[Union[np.ndarray, list]] = field(default_factory=list)
     betas: Optional[Union[np.ndarray, list]] = field(default_factory=list)
+    report_betas_as: Optional[str] = None
     std_error: Optional[Union[np.ndarray, list]] = field(default_factory=list)
     test_stat_name: Optional[str] = None
     test_stat: Optional[Union[np.ndarray, list]] = field(default_factory=list)
@@ -691,18 +693,51 @@ class Term(CoreDataclass):
     # ------------------------------------------------------------------ #
     #  Cleaning helpers                                                    #
     # ------------------------------------------------------------------ #
+    @staticmethod
+    def clean_term_name(factor: str) -> str:
+        """Extract clean variable name(s) from a formula term string.
+
+        Handles both patsy and formulaic term representations. Strips
+        ``C(...)`` wrappers and ``Treatment(...)`` references, returning
+        just the variable name(s) joined by ``:`` for interactions.
+
+        Parameters
+        ----------
+        factor : str
+            A term string, e.g., ``"C(drug, Treatment(2))"`` or
+            ``"C(drug, Treatment(2)):disease"``.
+
+        Returns
+        -------
+        str
+            Cleaned term name, e.g., ``"drug"`` or ``"drug:disease"``.
+
+        Examples
+        --------
+        >>> Term.clean_term_name("C(drug, Treatment(2))")
+        'drug'
+        >>> Term.clean_term_name("disease")
+        'disease'
+        >>> Term.clean_term_name("C(drug, Treatment(2)):disease")
+        'drug:disease'
+        >>> Term.clean_term_name("Intercept")
+        'Intercept'
+        """
+        factor_pattern = re.compile(r'(?<=C\()(.*?)(?=,|\))')
+        parts = factor.split(":")
+        cleaned = [
+            ''.join(re.findall(factor_pattern, f)) if "C(" in f else f
+            for f in parts
+        ]
+        return ":".join(cleaned)
+
     def _clean_term(self) -> str:
         """Clean the Patsy term name.
 
         ``"C(drug, Treatment(2))"``  →  ``"drug"``
         ``"C(drug):disease"``        →  ``"drug:disease"``
         """
-        factor_pattern = re.compile(r'(?<=C\()(.*?)(?=,|\))')
-        cleaned_factors = [
-            ''.join(re.findall(factor_pattern, f)) if "C(" in f else f
-            for f in self._parts
-        ]
-        return ":".join(cleaned_factors)
+        return Term.clean_term_name(self.term)
 
     @staticmethod
     def _clean_column(column: str) -> str:

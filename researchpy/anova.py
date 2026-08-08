@@ -17,6 +17,7 @@ import numpy
 import scipy.stats
 import patsy
 import pandas
+import re
 
 from researchpy.summary import summarize
 # Import from the new refactored location
@@ -627,16 +628,16 @@ class anova(ols):
         else:
             print("Not a valid return type option, please use either 'Dataframe' or 'Dictionary'.")
 
-    def regression_table(self, return_type="Dataframe", pretty_format=True,
-                         decimals={"Coef.": 2, "Std. Err.": 4, "test_stat": 4, "test_stat_p": 4, "CI": 2,
-                                   "Root MSE": 4, "R-squared": 4, "Adj R-squared": 4, "Sum of Squares": 4,
-                                   'Degrees of Freedom': 1, 'Mean Squares': 4, 'Effect size': 4},
-                         *args):
+    #def regression_table(self, return_type="Dataframe", pretty_format=True,
+    #                     decimals={"Coef.": 2, "Std. Err.": 4, "test_stat": 4, "test_stat_p": 4, "CI": 2,
+    #                               "Root MSE": 4, "R-squared": 4, "Adj R-squared": 4, "Sum of Squares": 4,
+    #                               'Degrees of Freedom': 1, 'Mean Squares': 4, 'Effect size': 4},
+    #                     *args):
 
-        return super().results(return_type=return_type, pretty_format=pretty_format, decimals=decimals)[2]
+    #    return super().results(return_type=return_type, pretty_format=pretty_format, decimals=decimals)[2]
 
-    #def regression_table(self, return_type="Dataframe", decimals=4, pretty_format=True, conf_level=0.95):
-    #    return super().results(return_type=return_type, decimals=decimals, pretty_format=pretty_format, conf_level=conf_level)[2]
+    def regression_table(self, return_type="Dataframe", decimals=4, pretty_format=True, conf_level=0.95):
+        return super().results(return_type=return_type, decimals=decimals, pretty_format=pretty_format, conf_level=conf_level)[2]
 
     def predict(self, estimate=None):
         return super().predict(estimate=estimate)

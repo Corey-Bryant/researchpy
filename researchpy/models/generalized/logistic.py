@@ -49,12 +49,15 @@ class LogisticRegression(GeneralizedLinearModel):
     """
 
     def __init__(self, formula, data=None, conf_level=0.95,
-                 report_as="or", display_summary=True,
-                 solver_options=None, table_decimals=None,
-                 initial_betas=None, initial_betas_method="ols"):
+                 report_betas_as="or",
+                 solver_options=None,
+                 table_decimals=None,
+                 initial_betas=None,
+                 initial_betas_method="ols",
+                 fit=True,
+                 display_summary=True,):
 
         if data is None: data = {}
-        self._test_stat_name = "z"
 
         #-------------------------------------------------#
         # -- Build a SolverOptions dataclass instance. -- #
@@ -66,7 +69,7 @@ class LogisticRegression(GeneralizedLinearModel):
                 algorithm="IRLS",
                 obj_function="log-likelihood",
                 tol=1e-7,
-                tolerance=1e-4,
+                tolerance=1e-7,
                 logtolerance=0,
                 max_iter=300,
                 display=True,
@@ -79,26 +82,84 @@ class LogisticRegression(GeneralizedLinearModel):
             self.SolverOptions = self.SolverOptions.with_overrides(solver_options)
 
 
+
+
+        # -- Calling GeneralizedLinearModel initialization method --
         super().__init__(formula, data, conf_level=conf_level, family="binomial", link="logit",
-                         solver_options=self.SolverOptions, table_decimals=table_decimals, fit=False)
+                         solver_options=self.SolverOptions, table_decimals=table_decimals, fit=False, test_stat_name="z"
+                         )
+
 
         self.__name__ = "Researchpy.LogisticRegression"
+        self.ModelDesignSpec.model = self.__name__
+        self.ModelDesignSpec.model_display_name = self._get_model_display_name()
+        self.ModelDesignSpec.report_betas_as = report_betas_as
 
-        # Initializing betas
-        self._initialize_betas(initial_betas=initial_betas, initial_betas_method=initial_betas_method)
+        if fit:
+            # -- Initializing betas --
+            self._initialize_betas(initial_betas=initial_betas, initial_betas_method=initial_betas_method)
 
-        # Fit the model
-        self.fit()
+            # -- Fit the model --
+            self.fit()
 
-        # Compute standard errors and statistics
-        self._compute_statistics()
+            # -- Compute standard errors and statistics --
+            self._compute_statistics()
 
-        # Build ModelResults (results() sets self.ModelResults internally)
-        self.results(report_as=report_as, return_type="Dataframe", pretty_format=True)
+            # -- Build ModelResults (results() sets self.ModelResults internally) --
+            self.results(report_betas_as=report_betas_as, return_type="Dataframe", pretty_format=True)
 
-        # Display the model results summary
-        if display_summary:
-            self.summary()
+            # -- Display the model results summary --
+            if display_summary:
+                self.summary()
+
+
+    def predict(self, estimate="y", trans=None, decimals=4, **kwargs):
+
+        #return super().predict(self, estimate=estimate, trans=expit)
+        return predict(self, estimate=estimate, trans=trans, decimals=decimals)
+
+    #--------------------------------------------------------------------------------------#
+    #                  Results Methods (new flow)                                          #
+    #--------------------------------------------------------------------------------------#
+    def _get_fit_statistics(self, table_decimals=None, **kwargs) -> dict:
+        """
+        Build the fit statistics dictionary for MLE-based models.
+
+        Reads from ``self.FitStatistics`` dataclass which is populated during
+        model fitting.
+
+        Parameters
+        ----------
+        table_decimals : dict or None
+            Override decimal settings.
+
+        Returns
+        -------
+        dict
+            Fit statistics as {label: [formatted_string]} pairs.
+        """
+        ## Resolving decimal places ##
+        if table_decimals is not None:
+            self._table_decimals = self._table_decimals | table_decimals
+
+
+        df_model = self.FitStatistics.df_model if self.FitStatistics.df_model is not None else ""
+        test_stat_model = round(float(self.FitStatistics.test_stat), self._table_decimals.get('test_stat_model', 4))
+        test_pval_model = round(float(self.FitStatistics.test_pval), self._table_decimals.get('test_stat_p', 4))
+        log_likelihood = round(float(self.FitStatistics.log_likelihood), self._table_decimals.get('log_likelihood', 4))
+        pseudo_r2 = round(float(self.FitStatistics.r_squared_pseudo), self._table_decimals.get('R-squared', 4))
+        n_iter = self.FitStatistics.additional_stats.get("n_iterations") if self.FitStatistics.additional_stats else None
+
+        fit_statistics = {
+            "n": [f"N = {self.n}"],
+            "test_stat_model": [f"LR Chi^2({df_model}) = {test_stat_model}"],
+            "test_pval_model": [f"Prob > Chi^2 = {test_pval_model}"],
+            "log_likelihood": [f"Log likelihood = {log_likelihood}"],
+            "pseudo_r2": [f"Pseudo R^2 = {pseudo_r2}"],
+            "n_iterations": [f"N iterations = {n_iter}"],
+        }
+
+        return fit_statistics
 
 
     def _get_from_child(self, **kwargs):
@@ -143,16 +204,6 @@ class LogisticRegression(GeneralizedLinearModel):
             return {"report_as": "or", "beta_type": "odds ratio"}
 
         #return super()._get_from_child(key, **kwargs)
-
-
-
-
-
-    def predict(self, estimate="y", trans=None, decimals=4, **kwargs):
-
-        #return super().predict(self, estimate=estimate, trans=expit)
-        return predict(self, estimate=estimate, trans=trans, decimals=decimals)
-
 
 
     def classification_table(self, threshold: float = 0.5,
@@ -292,14 +343,67 @@ class LogisticRegression(GeneralizedLinearModel):
         return confusion_df, stats_df
 
 
-    def results(self, report_as="or", return_type="Dataframe", pretty_format=True,
+    def _get_ModelResults(self, return_type="Dataframe", pretty_format=True,
+                          table_decimals=None, coef_transform=None
+                          ) -> ModelResults:
+        """
+        Assemble the ModelResults dataclass for generalized (MLE) models.
+
+        MLE models have no sum-of-squares decomposition, so ``model_table``
+        is always ``None``.
+
+        Parameters
+        ----------
+        return_type : str, optional
+            ``"Dataframe"`` or ``"Dictionary"``. Default is ``"Dataframe"``.
+        pretty_format : bool, optional
+            Whether to format the output for display. Default is True.
+        table_decimals : dict, optional
+            Dictionary specifying decimal places.
+        coef_transform : callable or None
+            Transformation function for coefficients and CIs (e.g., ``np.exp``
+            for odds ratios). Applied before rounding. Default is ``None``.
+
+        Returns
+        -------
+        ModelResults
+        """
+        ## Checking for valid return type ##
+        if return_type.lower() not in ["dataframe", "df", "pandas.dataframe", "pd.dataframe", "dictionary", "dict"]:
+            print("Not a valid return type option, please use either 'Dataframe' or 'Dictionary'.")
+
+        ## Resolving decimal places ##
+        if table_decimals is not None:
+            self._table_decimals = self._table_decimals | table_decimals
+
+        # Build the fit statistics and coefficient results
+        fit_statistics = self._get_fit_statistics(table_decimals=self._table_decimals)
+
+        table_from_child = self._get_from_child(key="model_table")
+
+        coefficients = self._get_coefficient_results(pretty_format=pretty_format,
+                                                     table_decimals=self._table_decimals,
+                                                     coef_transform=coef_transform
+                                                     )
+
+        self.ModelResults = ModelResults(
+                model_name=self._get_model_display_name(),
+                fit_statistics=fit_statistics,
+                model_table=table_from_child,
+                coefficients=coefficients,
+        )
+
+        return self.ModelResults
+
+
+    def results(self, report_betas_as="or", return_type="Dataframe", pretty_format=True,
                 table_decimals=None, **kwargs):
         """
         Return the logistic regression results as a ``ModelResults`` dataclass.
 
         Parameters
         ----------
-        report_as : str, optional
+        report_betas_as : str, optional
             ``"or"`` for odds ratios (default), ``"coef"`` for raw log-odds.
         return_type : str, optional
             ``"Dataframe"`` (default) or ``"Dictionary"``.
@@ -333,12 +437,14 @@ class LogisticRegression(GeneralizedLinearModel):
 
 
         # Determine the coefficient transform based on report_as
-        if report_as.lower() in ["or", "odds ratio", "odds_ratio"]:
+        if report_betas_as.lower() in ["or", "odds ratio", "odds_ratio"]:
             transform = np.exp
-            self._beta_type = "odds ratio"
+            #self._beta_type = "odds ratio"
+            self.CoefResults.report_betas_as = "odds ratio"
         else:
             transform = None
-            self._beta_type = "coef"
+            #self._beta_type = "coef"
+            self.CoefResults.report_betas_as = "coef"
 
 
         # Use the new GeneralizedLinearModel flow to build ModelResults
@@ -355,7 +461,8 @@ class LogisticRegression(GeneralizedLinearModel):
 
 
         # Rename "Coef." column to "Odds Ratio" if reporting odds ratios
-        if self._beta_type == "odds ratio":
+        #if self._beta_type == "odds ratio":
+        if self.CoefResults.report_betas_as == "odds ratio":
             if return_type.lower() in ["dataframe", "df", "pandas.dataframe", "pd.dataframe"]:
                 coef_df = self.ModelResults.as_dataframe("coefficients", mr.coefficients)
 

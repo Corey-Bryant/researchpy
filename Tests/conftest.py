@@ -18,7 +18,12 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from Tests.Golden.stata_datasets import auto as _auto_dict, systolic as _systolic_dict, lbw as _lbw_dict
+from Tests.Golden.stata_datasets import (
+    auto as _auto_dict,
+    systolic as _systolic_dict,
+    lbw as _lbw_dict,
+    glm_reg as _glm_reg_dict
+)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -41,6 +46,12 @@ def systolic_df():
 def lbw_df():
     """Full Stata 'lbw' DataFrame (189 obs x 11 vars)."""
     return pd.DataFrame(_lbw_dict)
+
+
+@pytest.fixture(scope="session")
+def glm_reg_df():
+    """Full Stata 'glm_reg' DataFrame (500 obs x 5 vars)."""
+    return pd.DataFrame(_glm_reg_dict)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

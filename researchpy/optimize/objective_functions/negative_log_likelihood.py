@@ -75,7 +75,7 @@ def neg_log_likelihood(params: object,
     ll = -family.log_likelihood(DV, mu)
 
     # Add regularization if specified
-    if hasattr(solver_options, "regularization") and solver_options.get("regularization") is not None:
+    if hasattr(solver_options, "regularization"):
         if solver_options.regularization == "l2":
             # Don't regularize intercept (first coefficient)
             ll += solver_options.alpha * np.sum(params[1:] ** 2)

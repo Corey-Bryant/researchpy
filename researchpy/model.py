@@ -14,7 +14,7 @@ DEPRECATION NOTICE:
 """
 import warnings
 import patsy
-from .utility import *
+from researchpy.utility import *
 
 
 class model():
