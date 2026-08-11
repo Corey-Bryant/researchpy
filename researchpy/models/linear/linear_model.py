@@ -1,8 +1,6 @@
-from typing import Any
 from pandas import DataFrame
 
 from researchpy.models.base import BaseModel
-from researchpy.optimize import ols_estimation_principal
 from researchpy.containers import ModelResults, ModelEffects, FactorEffects, SolverOptions, Term
 from researchpy.utility import *
 
@@ -41,35 +39,152 @@ class LinearModel(BaseModel):
             # OLS fit to compute the coefficients (betas) — stored in self.CoefResults.betas
             self.fit()
 
-            # Compute the model sum of squares, degrees of freedom, mean squares, F-value, p-value,
-            # and effect size measures — stored in self.ModelEffects
-            self.__model_sum_of_square_stats()
-
-            # Compute standard errors and confidence intervals — stored in self.CoefResults
-            self.__compute_beta_se_and_stats()
 
 
-    def fit(self, **kwargs):
+    def fit(self):
+        from researchpy.optimize import ols_estimation_principal
+        from researchpy.statistics import confidence_interval, compute_pvalue
+
+        # Computing the OLS estimates (betas) using the principal method — stored in self.CoefResults.betas
         self.CoefResults.betas = ols_estimation_principal(self.IV, self.DV)
 
+        # Compute the model sum of squares, degrees of freedom, mean squares, F-value, p-value,
+        # and effect size measures — stored in self.ModelEffects
+        self._compute_model_effects()
 
-    def __compute_beta_se_and_stats(self):
+        # Compute the standard errors, test statistics, p-values, and confidence intervals for the model coefficients
+        self._compute_statistics()
+
+
+    def _compute_model_effects(self):
+        """
+        Compute model ANOVA statistics based on the fitted model.
+        """
+        self._compute_ss()
+
+        # Compute model statistics (mean squares, F-statistic, p-value, effect sizes)
+        self._compute_model_stats()
+
+        # Append the model's results to the
+        self.FitStatistics.test_stat_name = "F"
+        self.FitStatistics.test_stat = self.ModelEffects.test_stat
+        self.FitStatistics.test_pval = self.ModelEffects.test_pval
+        self.FitStatistics.df_model = self.ModelEffects.df_model
+        self.FitStatistics.df_residual = self.ModelEffects.df_residual
+        self.FitStatistics.r_squared = self.ModelEffects.r_squared
+        self.FitStatistics.r_squared_adj = self.ModelEffects.r_squared_adj
+        self.FitStatistics.root_mse = self.ModelEffects.root_mse
+
+
+    def _compute_ss(self):
+        """
+        Compute model sum of squares (SS).
+        """
+        J = self.j_matrix()
+
+        # Total sum of squares (SSTO)
+        self.ModelEffects.ss_total = float((self.DV.T @ self.DV - (1/self.n) * self.DV.T @ J @ self.DV).item())
+        # Model sum of squares (SSR)
+        self.ModelEffects.ss_model = float((self.CoefResults.betas.T @ self.IV.T @ self.DV - (1/self.n) * self.DV.T @ J @ self.DV).item())
+        # Error sum of squares (SSE)
+        residuals = self.predict("residuals")
+        self.ModelEffects.ss_residual = float((residuals.T @ residuals).item())
+
+        # Degrees of freedom - Model
+        self.ModelEffects.df_model = return_numeric(np.linalg.matrix_rank(self.IV) - 1)
+        # Degrees of freedom - Error
+        self.ModelEffects.df_residual = return_numeric(self.n - np.linalg.matrix_rank(self.IV))
+        # Degrees of freedom - Total
+        self.ModelEffects.df_total = return_numeric(self.n - 1)
+
+
+    def _compute_model_stats(self):
+        """
+        Compute mean square, F-statistic, p-value, and effect size measures for the model
+
+        All computations use the model-level MSE and SS values stored in ``self.ModelEffects``.
+        """
+        # Model (MSR)
+        self.ModelEffects.msr = return_numeric(self.ModelEffects.ss_model * (1/self.ModelEffects.df_model))
+
+        # Residual (error; MSE)
+        self.ModelEffects.mse = return_numeric(self.ModelEffects.ss_residual * (1/self.ModelEffects.df_residual))
+
+        #Total (MST)
+        self.ModelEffects.mst = return_numeric(self.ModelEffects.ss_total * (1/self.ModelEffects.df_total))
+
+        ## Root Mean Square Error
+        self.ModelEffects.root_mse = float(np.sqrt(self.ModelEffects.mse))
+
+
+        # F-statistic and p-value for the model
+        self.ModelEffects.test_stat_name = "F"
+        self.ModelEffects.test_stat = return_numeric(self.ModelEffects.msr / self.ModelEffects.mse)
+
+        self.ModelEffects.test_pval = return_numeric(
+            compute_pvalue(
+                    self.ModelEffects.test_stat,
+                    "f",
+                    df=self.ModelEffects.df_model,
+                    df_denom=self.ModelEffects.df_residual,
+                    alternative="greater",
+            )
+        )
+
+
+        # Effect Size Measures
+        self.ModelEffects.r_squared = return_numeric(self.ModelEffects.ss_model / self.ModelEffects.ss_total)
+        self.ModelEffects.r_squared_adj = return_numeric(
+            1 - (self.ModelEffects.df_total / self.ModelEffects.df_residual) * (self.ModelEffects.ss_residual / self.ModelEffects.ss_total)
+        )
+        self.ModelEffects.eta_squared = self.ModelEffects.r_squared
+
+        self.ModelEffects.epsilon_squared = return_numeric(
+            (self.ModelEffects.df_model * (self.ModelEffects.msr - self.ModelEffects.mse)) / (self.ModelEffects.ss_total)
+        )
+
+        self.ModelEffects.omega_squared = return_numeric(
+            (self.ModelEffects.df_model * (self.ModelEffects.msr - self.ModelEffects.mse)) / (self.ModelEffects.ss_total + self.ModelEffects.mse)
+        )
+
+
+    def _compute_statistics(self):
+        """
+        Compute the standard errors, test statistics, p-values, and confidence intervals for the model coefficients.
+
+        Uses the Family instance from ModelDesignSpec to compute working
+        weights generically across distribution families.
+
+        Notes
+        -----
+        Covariance matrix: Cov(β) = φ · (X'WX)^{-1}
+        where W = diag(working_weights) and φ is the dispersion parameter
+        (φ = 1 for binomial and Poisson; estimated for Gaussian/Gamma).
+
+        For Gaussian family: φ = RSS / (n − k), the mean squared error.
+
+        t statistic: t = β / SE(β)
+
+        References
+        ----------
+        McCullagh & Nelder (1989), §2.4 — Estimation of the dispersion parameter.
+        """
         variance_covariance_beta_matrix = self.__variance_covariance_beta_matrix(method="standard",)
 
-        ## Standard Errors
+        # Standard Errors
         self.CoefResults.std_error = np.sqrt(np.diag(variance_covariance_beta_matrix)).reshape(-1, 1)
 
-        ## T-statistics
+        # T-statistics
         self.CoefResults.test_stat = self.CoefResults.betas * (1 / self.CoefResults.std_error)
 
-        ## Two-sided p-value
-        self.CoefResults.test_pval = np.array([
-            float((scipy.stats.t.sf(np.abs(t), self.ModelEffects.df_residual) * 2).item())
-            for t in self.CoefResults.test_stat
-        ])
+        # Two-sided p-value
+        self.CoefResults.test_pval = compute_pvalue(
+                self.CoefResults.test_stat,
+                self.CoefResults.test_stat_name,
+                df=self.ModelEffects.df_residual
+        )
 
-        self._confidence_interval()
-
+        self._confidence_interval(distribution=self.CoefResults.test_stat_name, dof=self.ModelEffects.df_residual)
 
 
     def __variance_covariance_residual_matrix(self, method="standard",):
@@ -93,81 +208,8 @@ class LinearModel(BaseModel):
         return variance_covariance_beta_matrix
 
 
-    def __model_sum_of_square_stats(self) -> None:
-
-        predicted_y = self.IV @ self.CoefResults.betas     # predicted y values
-        residuals = self.DV - predicted_y                   # Calculation of residuals (error)
-
-        J = self.j_matrix()                  # Creating the J matrix
-
-        ### Sum of Squares
-        # Total sum of squares (SSTO)
-        self.ModelEffects.ss_total = float((self.DV.T @ self.DV - (1/self.n) * self.DV.T @ J @ self.DV).item())
-
-        # Model sum of squares (SSR)
-        self.ModelEffects.ss_model = float((self.CoefResults.betas.T @ self.IV.T @ self.DV - (1/self.n) * self.DV.T @ J @ self.DV).item())
-
-        # Error sum of squares (SSE)
-        self.ModelEffects.ss_residual = float((residuals.T @ residuals).item())
 
 
-        ### Degrees of freedom
-        # Model
-        self.ModelEffects.df_model = return_numeric(np.linalg.matrix_rank(self.IV) - 1)
-
-        # Error
-        self.ModelEffects.df_residual = return_numeric(self.n - np.linalg.matrix_rank(self.IV))
-
-        # Total
-        self.ModelEffects.df_total = return_numeric(self.n - 1)
-
-        ### Mean Square
-        # Model (MSR)
-        self.ModelEffects.msr = return_numeric(self.ModelEffects.ss_model * (1/self.ModelEffects.df_model))
-
-        # Residual (error; MSE)
-        self.ModelEffects.mse = return_numeric(self.ModelEffects.ss_residual * (1/self.ModelEffects.df_residual))
-
-        #Total (MST)
-        self.ModelEffects.mst = return_numeric(self.ModelEffects.ss_total * (1/self.ModelEffects.df_total))
-
-        ## Root Mean Square Error
-        self.ModelEffects.root_mse = float(np.sqrt(self.ModelEffects.mse))
-
-
-        ### F-values
-        # Model
-        self.ModelEffects.test_stat_name = "F"
-        self.ModelEffects.test_stat = return_numeric(self.ModelEffects.msr / self.ModelEffects.mse)
-        self.ModelEffects.test_pval = return_numeric(
-            scipy.stats.f.sf(self.ModelEffects.test_stat, self.ModelEffects.df_model, self.ModelEffects.df_residual)
-        )
-
-        ### Effect Size Measures
-        # Model
-        self.ModelEffects.r_squared = return_numeric(self.ModelEffects.ss_model / self.ModelEffects.ss_total)
-        self.ModelEffects.r_squared_adj = return_numeric(
-            1 - (self.ModelEffects.df_total / self.ModelEffects.df_residual) * (self.ModelEffects.ss_residual / self.ModelEffects.ss_total)
-        )
-        self.ModelEffects.eta_squared = self.ModelEffects.r_squared
-
-        self.ModelEffects.epsilon_squared = return_numeric(
-            (self.ModelEffects.df_model * (self.ModelEffects.msr - self.ModelEffects.mse)) / (self.ModelEffects.ss_total)
-        )
-
-        self.ModelEffects.omega_squared = return_numeric(
-            (self.ModelEffects.df_model * (self.ModelEffects.msr - self.ModelEffects.mse)) / (self.ModelEffects.ss_total + self.ModelEffects.mse)
-        )
-
-
-        self.FitStatistics.test_stat_name = "F"
-        self.FitStatistics.test_stat = self.ModelEffects.test_stat
-        self.FitStatistics.test_pval = self.ModelEffects.test_pval
-        self.FitStatistics.df_model = self.ModelEffects.df_model
-        self.FitStatistics.df_residual = self.ModelEffects.df_residual
-        self.FitStatistics.r_squared = self.ModelEffects.r_squared
-        self.FitStatistics.r_squared_adj = self.ModelEffects.r_squared_adj
-        self.FitStatistics.root_mse = self.ModelEffects.root_mse
 
 
     #--------------------------------------------------------------------------------------#

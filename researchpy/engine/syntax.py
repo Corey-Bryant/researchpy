@@ -381,8 +381,7 @@ def _parse_formula(
     Parameters
     ----------
     formula : str
-        Wilkinson-style formula, e.g., ``"y ~ C(x)"``,
-        ``"y ~ C(x):C(k)"``, ``"y ~ C(x)*C(k)"``.
+        Wilkinson-style formula, e.g., ``"y ~ C(x)"``, ``"y ~ C(x):C(k)"``, ``"y ~ C(x)*C(k)"``.
     data : pd.DataFrame
         Source DataFrame.
     weights : str or None

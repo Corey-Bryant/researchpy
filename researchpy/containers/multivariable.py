@@ -666,7 +666,8 @@ class Term(CoreDataclass):
         self.is_factor = self._resolve_is_factor()
         # If columns were provided but not yet cleaned, clean them
         if self.columns and len(self.columns_cleaned) < len(self.columns):
-            self.columns_cleaned = [self._clean_column(c) for c in self.columns]
+            #self.columns_cleaned = [self._clean_column(c) for c in self.columns]
+            self.columns_cleaned = [self.clean_column_name(c) for c in self.columns]
 
 
         # ------------------------------------------------------------------ #
@@ -695,7 +696,7 @@ class Term(CoreDataclass):
     # ------------------------------------------------------------------ #
     @staticmethod
     def clean_term_name(factor: str) -> str:
-        """Extract clean variable name(s) from a formula term string.
+        """Extract clean variable name(s) from a Formulaic/Patsy string.
 
         Handles both patsy and formulaic term representations. Strips
         ``C(...)`` wrappers and ``Treatment(...)`` references, returning
@@ -739,19 +740,35 @@ class Term(CoreDataclass):
         """
         return Term.clean_term_name(self.term)
 
+
     @staticmethod
-    def _clean_column(column: str) -> str:
-        """Clean a single Patsy column name.
+    def clean_column_name(column: str) -> str:
+        """Extract clean factor variable level name(s) from a Formulaic/Patsy string.
 
         Extracts the level value from bracket notation and strips ``C(…)``
         wrappers.
 
-        ``"C(drug, Treatment(2))[T.3]"``              →  ``"3"``
-        ``"C(drug, Treatment(2))[T.1]:disease"``       →  ``"1:disease"``
-        ``"disease"``                                  →  ``"disease"``
-        ``"Intercept"``                                →  ``"Intercept"``
+        Parameters
+        ----------
+        column : str
+            A column string, e.g., ``"C(drug, Treatment(2))[T.3]"`` or ``"C(drug, Treatment(2))[T.1]:disease"``.
+
+        Returns
+        -------
+        str
+            Cleaned column name, e.g., ``"3"`` or ``"1:disease"``.
+
+        Examples
+        --------
+        >>> Term.clean_column_name("C(drug, Treatment(2))[T.3]")
+        '3'
+        >>> Term.clean_column_name("C(drug, Treatment(2))[T.1]:disease")
+        '1:disease'
+        >>> Term.clean_column_name("disease")
+        'disease'
+        >>> Term.clean_column_name("Intercept")
+        'Intercept'
         """
-        #level_pattern = re.compile(r'(?<=\[..)(.*?)(?=\])')
         level_pattern = re.compile(r'\[(?:[A-Z]+\.)?(.*?)\]')
 
         parts = column.split(":")
@@ -764,6 +781,20 @@ class Term(CoreDataclass):
                 cleaned.append(part)
 
         return ":".join(cleaned)
+
+
+    def _clean_column(self) -> str:
+        """Clean a single Formulaic/Patsy column name.
+
+        Extracts the level value from bracket notation and strips ``C(…)``
+        wrappers.
+
+        ``"C(drug, Treatment(2))[T.3]"``              →  ``"3"``
+        ``"C(drug, Treatment(2))[T.1]:disease"``       →  ``"1:disease"``
+        ``"disease"``                                  →  ``"disease"``
+        ``"Intercept"``                                →  ``"Intercept"``
+        """
+        return Term.clean_column_name(self.term)
 
 
     def _include_formulaic_reference_column(self):

@@ -44,7 +44,7 @@ __all__ = [
     "__version__",
 
     # Utility
-    "rounder", "return_numeric", "rp_round", "as_numeric",
+    "rounder", "return_numeric", "_as_numeric",
     "patsy_column_cleaner", "patsy_term_cleaner",
     "variable_information", "base_table",
 

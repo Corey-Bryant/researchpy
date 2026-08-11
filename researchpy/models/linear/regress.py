@@ -72,7 +72,7 @@ class Regress(LinearModel):
                  display_summary=True, return_type="Dictionary",
                  na_rep='', pretty_format=True,):
 
-        super().__init__(formula=formula, data=data, conf_level=conf_level, table_decimals=table_decimals)
+        super().__init__(formula=formula, data=data, conf_level=conf_level, table_decimals=table_decimals, fit=True)
 
 
         # -- Updating ModelDesignSpec and CoefResults dataclasses based on current model --

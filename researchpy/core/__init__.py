@@ -11,17 +11,10 @@ Usage:
 """
 
 from researchpy.core.data_utils import as_array, validate_array
-from researchpy.core.syntax_engine import SyntaxSpec, TermSpec, resolve
 
 
 # Define what gets exported with "from researchpy.core import *"
 __all__ = [
     'as_array',
     'validate_array',
-    'SyntaxSpec',
-    'TermSpec',
-    'resolve',
-    'build_indicator_matrix',
-    'grouped_statistic',
-    'grouped_statistic_pivot',
 ]

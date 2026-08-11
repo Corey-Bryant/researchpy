@@ -12,9 +12,9 @@ def ols_estimation_principal(IV: ndarray, DV: ndarray) -> ndarray:
     Parameters
     ----------
     IV : ndarray
-        The design matrix (independent variables).
+        The independent variable(s) design matrix.
     DV : ndarray
-        The response vector (dependent variable).
+        The dependent variable response vector.
 
     Returns
     -------
@@ -40,9 +40,9 @@ def lstsq_estimation_principal(IV: ndarray, DV: ndarray) -> ndarray:
     Parameters
     ----------
     IV : ndarray
-        The design matrix (independent variables).
+        The independent variable(s) design matrix.
     DV : ndarray
-        The response vector (dependent variable).
+        The dependent variable response vector.
 
     Returns
     -------

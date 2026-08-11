@@ -9,8 +9,8 @@ using the likelihood ratio test statistic.
 from numpy import (
     ones, array,
 )
-from scipy.stats import chi2
 
+from researchpy.statistics import compute_pvalue
 from researchpy.containers import TestResults, FitStatistics
 from researchpy.optimize import (
     IRLS, mle_estimation_principal,
@@ -206,7 +206,12 @@ class LikelihoodRatioTest:
             self.FitStatistics.df_model = self.model.k - 1  # Full model params minus intercept
 
         # p-value from chi-squared distribution
-        self.FitStatistics.test_pval = chi2.sf(self.FitStatistics.test_stat, self.FitStatistics.df_model)
+        self.FitStatistics.test_pval = compute_pvalue(
+                self.FitStatistics.test_stat,
+                "chi2",
+                df=self.FitStatistics.df_model,
+                alternative="greater",
+        )
 
         # McFadden's Pseudo R² = 1 - (LL_full / LL_null)
         if self.FitStatistics.log_likelihood is not None and self.FitStatistics.log_likelihood_restricted is not None and self.FitStatistics.log_likelihood_restricted != 0:

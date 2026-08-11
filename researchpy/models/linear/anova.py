@@ -7,11 +7,11 @@ using sum of squares types I, II, and III.
 """
 
 import numpy as np
-import scipy.stats
 import formulaic
 import pandas as pd
 from pandas import DataFrame
 
+from researchpy.statistics import compute_pvalue
 from researchpy.models.linear.linear_model import LinearModel
 from researchpy.containers import ModelResults, FactorEffects, Term
 from researchpy.utility import as_numeric
@@ -153,7 +153,9 @@ class Anova(LinearModel):
 
         # F-statistic and p-value
         f_value = msr_f / mse
-        f_p_value = scipy.stats.f.sf(f_value, df_factor, df_residual)
+        f_p_value = compute_pvalue(
+            f_value, "f", df=df_factor, df_denom=df_residual, alternative="greater"
+        )
 
         # Partial Effect Size Measures
         eta_sq = ss_factor / (ss_factor + ss_residual)
@@ -172,38 +174,6 @@ class Anova(LinearModel):
             "epsilon_sq": epsilon_sq,
             "omega_sq": omega_sq,
         }
-
-    @classmethod
-    def _append_factor_effects2(cls, factor_effects, source, ss_factor,
-                               df_factor, stats):
-        """
-        Append a single factor's results to the factor_effects accumulator dict.
-
-        Uses ``as_numeric()`` for safe numeric conversion.
-
-        Parameters
-        ----------
-        factor_effects : dict
-            The accumulator dictionary being built up during ANOVA computation.
-        source : str
-            Term name for this factor.
-        ss_factor : float or ndarray
-            Sum of squares for this factor.
-        df_factor : float or int
-            Degrees of freedom for this factor.
-        stats : dict
-            Output from ``_compute_factor_stats()``.
-        """
-        factor_effects["Source"].append(source)
-        factor_effects["Sum of Squares"].append(as_numeric(ss_factor))
-        factor_effects["Degrees of Freedom"].append(as_numeric(df_factor))
-        factor_effects["Mean Squares"].append(as_numeric(stats["msr_f"]))
-        factor_effects["F value"].append(as_numeric(stats["f_value"]))
-        factor_effects["p-value"].append(as_numeric(stats["f_p_value"]))
-        factor_effects["Eta squared"].append(as_numeric(stats["eta_sq"]))
-        factor_effects["Epsilon squared"].append(as_numeric(stats["epsilon_sq"]))
-        factor_effects["Omega squared"].append(as_numeric(stats["omega_sq"]))
-
 
     def _append_factor_effects(self, source, ss_factor, df_factor, stats):
         """

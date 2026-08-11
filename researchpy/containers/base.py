@@ -108,6 +108,13 @@ class CoreDataclass:
 
 '''
 @dataclass
+class EstimateEffect:
+    
+    test_stat_name: Optional[str]
+
+
+
+@dataclass
 class EstimateResults(CoreDataclass):
     """Container for results of a statistical estimation.
 

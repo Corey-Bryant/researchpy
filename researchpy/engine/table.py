@@ -102,6 +102,11 @@ class TableSpec(CoreDataclass):
     title: Optional[str] = None
     footnotes: Optional[List[str]] = None
     decimals: int = 4
+    table_format: Dict[str, int] = field(default_factory=dict)
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.__name__ = "Researchpy.TableSpec"
 
 
 # ======================================================================
@@ -165,7 +170,7 @@ class TableEngine(CoreDataclass):
 
         # Apply rounding
         numeric_cols = df.select_dtypes(include="number").columns
-        df[numeric_cols] = df[numeric_cols].round(self.spec.decimals)
+        df[numeric_cols] = df[numeric_cols].round(self.spec.decimals)           # -- HERE is where the decimal formatting occurs
 
         # Set index
         if index_cols:

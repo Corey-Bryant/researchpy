@@ -7,7 +7,9 @@ from researchpy.containers import (
     SolverOptions, FitStatistics, ModelEffects, CoefResults, ModelDesignSpec, Term,
 )
 
-from researchpy.statistics import _confidence_interval
+from researchpy.statistics import (
+    confidence_interval,
+)
 
 
 
@@ -42,7 +44,7 @@ class BaseModel(DesignMatrix):
             self._table_decimals = {
                 "Coef.": 2, "Std. Err.": 3, "test_stat": 4, "test_stat_p": 4, "CI": 2,
                 "Root MSE": 4, "R-squared": 4, "Adj R-squared": 4, "Sum of Squares": 4,
-                        'Degrees of Freedom': 1, 'Mean Squares': 4, 'Effect size': 4
+                'Degrees of Freedom': 1, 'Mean Squares': 4, 'Effect size': 4
             }
         if table_decimals is not None:
             self._table_decimals = self._table_decimals | table_decimals
@@ -51,7 +53,6 @@ class BaseModel(DesignMatrix):
 
 
         self.__name__ = "Researchpy.BaseModel"
-        #self._beta_type = "coef"
 
         # -- Creating the matrix --
         dm = DesignMatrix.from_formula(
@@ -119,14 +120,56 @@ class BaseModel(DesignMatrix):
         return self.from_formula(formula, data, output=output, include_intercept=include_intercept,
                                  ensure_full_rank=ensure_full_rank, **kwargs, )
 
-    def fit(self, estimation_principal=None, **kwargs):
+
+    def fit(self):
         raise NotImplementedError(
-            f"{type(self).__name__} must override fit()."
+                f"{type(self).__name__} must override fit()."
+        )
+        from researchpy.statistics import confidence_interval, compute_pvalue
+
+        def _compute_interval(self):
+            ...
+
+        def fit_test(self, test_stat, est_stat_name, ):
+            test_pval = self.compute_pvalue(
+                    self.CoefResults.test_stat,
+                    self.CoefResults.test_stat_name,
+                    df=self.ModelEffects.df_residual
+            )
+
+
+
+
+
+    def _compute_statistics(self, confidence=0.95, distribution_name="normal", distribution_object=None, dof=None):
+        """
+        Compute the standard errors, test statistics, p-values, and confidence intervals for the model coefficients.
+
+        Uses the Family instance from ModelDesignSpec to compute working
+        weights generically across distribution families.
+
+        Notes
+        -----
+        Covariance matrix: Cov(β) = φ · (X'WX)^{-1}
+        where W = diag(working_weights) and φ is the dispersion parameter
+        (φ = 1 for binomial and Poisson; estimated for Gaussian/Gamma).
+
+        For Gaussian family: φ = RSS / (n − k), the mean squared error.
+
+        Wald statistic: z = β / SE(β)  [or t for models with estimated dispersion]
+
+        References
+        ----------
+        McCullagh & Nelder (1989), §2.4 — Estimation of the dispersion parameter.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} must override _compute_statistics()."
         )
 
 
-    def _confidence_interval(self, confidence=0.95, distribution_name="normal",
-                             distribution_object=None, dof=None):
+
+
+    def _confidence_interval(self, confidence=0.95, distribution_name="normal", dof=None):
         """
         Estimate the confidence interval for a given point estimate and scale error estimate.
 
@@ -152,10 +195,7 @@ class BaseModel(DesignMatrix):
         conf_int_upper = []
 
         for beta, se in zip(self.CoefResults.betas, self.CoefResults.std_error):
-            ci_bounds = _confidence_interval(beta, se, confidence,
-                                             distribution_name=distribution_name,
-                                             distribution_object=distribution_object,
-                                             dof=dof)
+            ci_bounds = confidence_interval(beta, se, confidence, dof=dof)
 
             conf_int_lower.append(ci_bounds.statistics["lower"])
             conf_int_upper.append(ci_bounds.statistics["upper"])
@@ -259,7 +299,9 @@ class BaseModel(DesignMatrix):
             ts = np.round(ts_raw, d_ts)
             pv = np.round(pv_raw, d_p)
 
-            return as_numeric(beta), as_numeric(se), as_numeric(ts), as_numeric(pv), [as_numeric(ci_lo), as_numeric(ci_hi)]
+            return as_numeric(beta), as_numeric(se), as_numeric(ts), as_numeric(pv), [as_numeric(ci_lo),
+                                                                                      as_numeric(ci_hi)
+                                                                                      ]
 
 
         # ---- Build output rows -----------------------------------------------

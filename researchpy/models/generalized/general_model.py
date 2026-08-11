@@ -13,6 +13,7 @@ from researchpy.optimize import (
     IRLS,
 )
 
+from researchpy.statistics import compute_pvalue
 
 
 
@@ -68,12 +69,10 @@ class GeneralizedLinearModel(BaseModel):
 
 
         # -- Calling BaseModel initialization method --
-        super().__init__(formula=formula, data=data, conf_level=conf_level,
-                         family=family, link=link,
-                         solver_options=self.SolverOptions,
-                         table_decimals=table_decimals,
-                         test_stat_name=test_stat_name,
-                         **kwargs)
+        super().__init__(formula=formula, data=data, conf_level=conf_level, family=family, link=link,
+                         solver_options=self.SolverOptions, table_decimals=table_decimals,
+                         test_stat_name=test_stat_name, **kwargs,
+                         )
 
         self.__name__ = "Researchpy.GeneralizedLinearModel"
         self.ModelDesignSpec.model = self.__name__
@@ -95,7 +94,7 @@ class GeneralizedLinearModel(BaseModel):
             self.fit()
 
             # -- Compute standard errors and statistics --
-            self._compute_statistics()
+            self._compute_statistics(confidence=conf_level)
 
             # -- Build ModelResults (results() sets self.ModelResults internally)
             self.results(report_betas_as=report_betas_as, return_type="Dataframe", pretty_format=True)
@@ -158,7 +157,7 @@ class GeneralizedLinearModel(BaseModel):
         )
 
 
-    def fit(self, **kwargs):
+    def fit(self):
         # Initialize betas if not already set (default is empty list from CoefResults)
         if not isinstance(self.CoefResults.betas, np.ndarray) or self.CoefResults.betas.size == 0:
             self.CoefResults.betas = np.zeros((self.k, 1))
@@ -235,7 +234,8 @@ class GeneralizedLinearModel(BaseModel):
                 print(f"Warning: {self.SolverOptions.estimation_method} using {self.SolverOptions.algorithm} did not converge ({result.message})")
 
 
-    def _compute_statistics(self):
+    def _compute_statistics(self, confidence=0.95, distribution_name="normal",
+                             distribution_object=None, dof=None):
         """
         Compute standard errors, Wald test statistics, p-values, and
         confidence intervals using the GLM Fisher information matrix.
@@ -257,8 +257,6 @@ class GeneralizedLinearModel(BaseModel):
         ----------
         McCullagh & Nelder (1989), §2.4 — Estimation of the dispersion parameter.
         """
-        from scipy.stats import norm, t as t_dist
-
         family = self.ModelDesignSpec.family
         eta = self.IV @ self.CoefResults.betas       # linear predictor
         mu = family.link_inverse(eta)                # fitted values
@@ -295,6 +293,7 @@ class GeneralizedLinearModel(BaseModel):
             # (X'WX)^{-1} = (R'R)^{-1} = R^{-1} @ R'^{-1}
             R_inv = np.linalg.inv(R)
             cov_matrix = dispersion * (R_inv @ R_inv.T)
+
         except np.linalg.LinAlgError:
             # Fallback: pseudo-inverse for rank-deficient cases
             XtWX = self.IV.T @ (self.IV * w)
@@ -308,10 +307,14 @@ class GeneralizedLinearModel(BaseModel):
         # P-values: z-test for known dispersion, t-test for estimated
         if self.CoefResults.test_stat_name == "t":
             dof = self.n - self.k
-            self.CoefResults.test_pval = 2 * t_dist.sf(np.abs(self.CoefResults.test_stat), df=dof)
+            self.CoefResults.test_pval = compute_pvalue(
+                self.CoefResults.test_stat, "t", df=dof
+            )
             self._confidence_interval(distribution_name="t", dof=dof)
         else:
-            self.CoefResults.test_pval = 2 * norm.sf(np.abs(self.CoefResults.test_stat))
+            self.CoefResults.test_pval = compute_pvalue(
+                self.CoefResults.test_stat, "z"
+            )
             self._confidence_interval(distribution_name="normal")
 
 

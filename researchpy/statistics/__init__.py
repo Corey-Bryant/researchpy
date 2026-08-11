@@ -17,12 +17,17 @@ Public API:
     summarize()        - Unified dispatcher for computing summary statistics
 """
 
-from ._estimation_interval import _confidence_interval
-
-
+from ._distribution import (
+    get_distribution,
+    _confidence_interval as confidence_interval,
+    _compute_pvalue as compute_pvalue,
+)
+#from ._hypothesis_test import compute_pvalue
 
 
 __all__ = [
-    "_confidence_interval",
+    "get_distribution",
+    #"_confidence_interval",
+    "confidence_interval",
+    "compute_pvalue",
 ]
-

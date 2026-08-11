@@ -277,10 +277,12 @@ class DesignMatrix(CoreDataclass):
                 formula=formula,
             )
 
+
+
     # ==================================================================
     # Computational helpers
     # ==================================================================
-    def hat_matrix(self) -> np.ndarray:
+    def hat_matrix(self, IV: DesignMatrix) -> np.ndarray:
         """Compute the hat matrix H = X(X'X)⁻¹X'.
 
         Falls back to the Moore-Penrose pseudoinverse if X'X is singular.
