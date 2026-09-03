@@ -8,7 +8,7 @@ from researchpy.containers import (
 )
 
 from researchpy.statistics import (
-    confidence_interval,
+    _estimate_confidence_interval, _compute_pvalue
 )
 
 
@@ -125,20 +125,6 @@ class BaseModel(DesignMatrix):
         raise NotImplementedError(
                 f"{type(self).__name__} must override fit()."
         )
-        from researchpy.statistics import confidence_interval, compute_pvalue
-
-        def _compute_interval(self):
-            ...
-
-        def fit_test(self, test_stat, est_stat_name, ):
-            test_pval = self.compute_pvalue(
-                    self.CoefResults.test_stat,
-                    self.CoefResults.test_stat_name,
-                    df=self.ModelEffects.df_residual
-            )
-
-
-
 
 
     def _compute_statistics(self, confidence=0.95, distribution_name="normal", distribution_object=None, dof=None):
@@ -167,9 +153,7 @@ class BaseModel(DesignMatrix):
         )
 
 
-
-
-    def _confidence_interval(self, confidence=0.95, distribution_name="normal", dof=None):
+    def _confidence_interval(self, confidence=0.95, distribution="normal", dof=None):
         """
         Estimate the confidence interval for a given point estimate and scale error estimate.
 
@@ -177,10 +161,8 @@ class BaseModel(DesignMatrix):
         ----------
         confidence : float, optional
             The desired confidence level (between 0 and 1). Default is 0.95 for a 95% confidence interval.
-        distribution_name : str, optional
-            The name of the distribution to use for the confidence interval calculation. Default is "norm" for the normal distribution.
-        distribution_object : scipy.stats.rv_continuous or scipy.stats.rv_discrete, optional
-            A specific scipy.stats distribution object to use instead of the default or named distribution.
+        distribution : str, optional
+            The name of the distribution to use for the confidence interval calculation. Default is "normal" for the normal distribution.
         dof : int, optional
             Degrees of freedom, required if using a t-distribution.
         decimals : int, optional
@@ -195,7 +177,7 @@ class BaseModel(DesignMatrix):
         conf_int_upper = []
 
         for beta, se in zip(self.CoefResults.betas, self.CoefResults.std_error):
-            ci_bounds = confidence_interval(beta, se, confidence, dof=dof)
+            ci_bounds = _estimate_confidence_interval(beta, se, distribution=distribution, confidence=confidence, dof=dof)
 
             conf_int_lower.append(ci_bounds.statistics["lower"])
             conf_int_upper.append(ci_bounds.statistics["upper"])

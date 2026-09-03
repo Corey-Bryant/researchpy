@@ -5,7 +5,7 @@ computing confidence intervals, and calculating p-values for hypothesis tests.
 
 Functions:
     - get_distribution(name): Retrieve a scipy distribution by name with clear error messaging.
-    - _confidence_interval(point_est, scale_error_est, distribution, confidence=0.95, dof=None, decimals=None): Compute a confidence interval for a point estimate.
+    - _estimate_confidence_interval(point_est, scale_error_est, distribution, confidence=0.95, dof=None, decimals=None): Compute a confidence interval for a point estimate.
     - _compute_pvalue(test_stat, distribution_name, alternative="two-sided", dof=None): Compute a p-value for a hypothesis test.
 """
 from typing import Union, Optional, TYPE_CHECKING
@@ -21,23 +21,23 @@ if TYPE_CHECKING:
 
 
 
-def get_distribution(name: Optional[str],
-                     return_supported: bool = False,
-                     supported_only: bool = True
-                     ) -> "scipy.stats.distributions":
+def _get_distribution(distribution: Optional[Union[str, distributions.rv_continuous, distributions.rv_discrete]] = None,
+                      supported_only: bool = True
+                      ) -> "scipy.stats.distributions":
     """
     Retrieve a scipy distribution by name with clear error messaging.
 
     Parameters
     ----------
-    name : str
-        The name of the distribution to retrieve. Supported currently supported distributions include:
+    distribution : str
+        The name of the distribution to retrieve. Currently supported distributions include:
         - "t" or "student's t" for Student's t-distribution
         - "z" or "normal" for Standard normal distribution
         - "f" for Fisher–Snedecor F-distribution
         - "chi2" or "chi-squared" for Chi-squared distribution
-    return_supported : bool, optional
-        If True, returns the list of supported distributions. Default is False.
+        - "bernoulli" or "ber" for Bernoulli distribution
+        - "binomial" or "bin" for Binomial distribution
+        - "poisson" or "poi" for Poisson distribution
 
     Returns
     -------
@@ -45,47 +45,56 @@ def get_distribution(name: Optional[str],
 
     Examples
     --------
-    >>> from researchpy.statistics import get_distribution
-    >>> dist = get_distribution("t")
+    >>> from researchpy.statistics import _get_distribution
+    >>> dist = _get_distribution("t")
     >>> dist.name
     't'
-    >>> dist = get_distribution("normal") # == get_distribution("z")
+    >>> dist = _get_distribution("normal") # == get_distribution("z")
     >>> dist.name
     'norm'
-    >>> dist = get_distribution("f")
+    >>> dist = _get_distribution("f")
     >>> dist.name
     'f'
-    >>> dist = get_distribution("chi2")
+    >>> dist = _get_distribution("chi2")
     >>> dist.name
     'chi2'
     """
     from scipy.stats import distributions
 
-    # Map user-friendly names to scipy canonical names
+    if isinstance(distribution, str):
+        name = distribution.lower().strip()
+    elif isinstance(distribution, (distributions.rv_continuous, distributions.rv_discrete)):
+        return distribution
+    else:
+        raise ValueError(
+                f"distribution must be a string or a scipy.stats distribution object, got {type(distribution)}. "
+        )
+
+
+    # Map scipy canonical names to user-friendly names; {canonical_name : [friendly_name1, friendly_name2, etc.]}
     distribution_map = {
-        "norm" : ["norm", "z", "normal", "gaussian"],
+        "norm" : ["z", "norm", "normal", "gaussian",],
         "t"    : ["t", "student's t", "students t"],
         "chi2" : ["chi2", "chi^2", "chi-sq", "chi-squared"],
         "f"    : ["f", "fisher"],
+        "bernoulli" : ["bernoulli", "ber",],
+        "binomial" : ["binomial", "bin",],
+        "poisson" : ["poisson", "poi"],
     }
 
-    name = name.lower().strip()
+    canonical = ''
+    for canonical_name, friendly_names in distribution_map.items():
+        if name == canonical_name or name in friendly_names:
+            canonical = canonical_name
+            return getattr(distributions, canonical)
 
-    if return_supported:
-        supported = []
-        for k, v in distribution_map.items():
-            supported.append(k), supported.append(v)
 
-        print("Supported distributions:")
-        return list(distribution_map.items())
-
-    if name not in distribution_map:
+    if canonical == '':
         if supported_only:
             raise ValueError(
                     f"Distribution '{name}' is not supported. "
-                    f"Use `return_supported=True` to see the list of supported distributions."
+                    f"Supported distributions include: {distribution_map}."
             )
-
 
         if not hasattr(distributions, name):
             available = [n for n in dir(distributions) if isinstance(getattr(distributions, n),
@@ -94,13 +103,12 @@ def get_distribution(name: Optional[str],
                          ]
             raise ValueError(
                     f"Distribution '{name}' not found. "
-                    f"Available options include: {', '.join(sorted(available)[:10])}..."
+                    f"Available options include: {', '.join(sorted(available))}..."
             )
+        else:
+            return getattr(distributions, name)
 
 
-    name = distribution_map[name]
-    canonical_name = distribution_map[name]
-    return getattr(distributions, canonical_name)
 
 
 
@@ -160,7 +168,7 @@ s
         )
 
     if isinstance(distribution, str):
-        distribution = get_distribution(distribution)
+        distribution = _get_distribution(distribution)
     elif isinstance(distribution, (distributions.rv_continuous, distributions.rv_discrete)):
         pass
     else:
@@ -209,21 +217,132 @@ s
 
 
 
+def _estimate_confidence_interval(point_est: Union[float, int, np.floating, np.integer],
+                                  scale_error_est: Union[float, int, np.floating, np.integer],
+                                  distribution: Union[str, distributions.rv_continuous, distributions.rv_discrete],
+                                  *,
+                                  confidence: Union[float, int, np.floating, np.integer] = 0.95,
+                                  dof: Union[float, int, np.floating, np.integer, None] = None,
+                                  decimals: Union[float, int, np.floating, np.integer, None] = None,
+                                  **kwargs: object,
+                                  ) -> TestResults:
+    """
+    Computes a confidence interval for a point estimate using the specified distribution.
+s
+    Parameters
+    ----------
+    :param point_est: The point estimate for which the confidence interval is to be computed.
+    :type point_est: Union[float, int, np.floating, np.integer]
+    :param scale_error_est: The standard error of the point estimate.
+    :type scale_error_est: Union[float, int, np.floating, np.integer]
+    :param distribution: The name of the distribution to use for computing the confidence interval.
+    :type distribution: Union[str, distributions.rv_continuous, distributions.rv_discrete]. If str is passed, it will be
+            resolved to a ``scipy.stats distribution`` using ``get_distribution()``.
+    :param confidence: The confidence level for the interval.
+    :type confidence: Union[float, int, np.floating, np.integer]
+    :param dof: Degrees of freedom for the t-distribution.
+    :type dof: Union[float, int, np.floating, np.integer, None]
+    :param decimals: Number of decimal places to round the results to.
+    :type decimals: Union[float, int, np.floating, np.integer, None]
+
+    Returns
+    -------
+    :return: The confidence interval as a TestResults object.
+    :rtype: TestResults
+
+    Examples
+    --------
+    >>> from researchpy import _estimate_confidence_interval
+    >>> point_est = 5.0
+    >>> scale_error_est = 1.0
+    >>> distribution_name = "norm"
+    >>> confidence = 0.95
+    >>> ci_result = _estimate_confidence_interval(point_est, scale_error_est, distribution_name, confidence=confidence)
+    >>> print(ci_result.statistics)
+    {'lower': 3.04, 'upper': 6.96}
+
+    """
+    # --------------------------- #
+    # -- Validating Parameters -- #
+    # ----------------------------#
+    if confidence <= 0 or confidence >= 1 :
+        raise ValueError(
+                f"confidence must be between 0 and 1 (exclusive), got {confidence}. "
+                f"For a 95% CI, use confidence=0.95.",
+        )
+
+    if isinstance(distribution, str):
+        distribution = _get_distribution(distribution)
+    elif isinstance(distribution, (distributions.rv_continuous, distributions.rv_discrete)):
+        pass
+    else:
+        raise ValueError(
+                f"distribution must be a string or a scipy.stats distribution object, got {type(distribution)}. "
+                f"Use get_distribution() to retrieve a distribution by name.",
+        )
+
+    #--------------------------------------#
+    # -- Estimating Confidence Interval -- #
+    #--------------------------------------#
+    if distribution.name.lower() == "t":
+        if dof is None:
+            raise ValueError(
+                    f"Degrees of freedom (dof) must be provided for t-distribution. "
+            )
+        lower, upper = distribution.interval(confidence, df=dof, loc=point_est, scale=scale_error_est)
+    else:
+        lower, upper = distribution.interval(confidence, loc=point_est, scale=scale_error_est)
+
+
+
+    #--------------------------------#
+    # -- Formatting and Returning -- #
+    #--------------------------------#
+    try:
+        lower = as_numeric(lower)
+        upper = as_numeric(upper)
+
+        if decimals is not None and decimals >= 0:
+            lower = round(lower, decimals)
+            upper = round(upper, decimals)
+
+    except Exception as e:
+        print(
+                f"Error: {e} --> Failed to convert lower and upper bounds to numeric; lower={lower}, upper={upper}."
+                f"Returning as original values instead, i.e. returning as [{lower}, {upper}].",
+        )
+
+    test_name = f"{confidence * 100:.1f}% Conf. Interval"
+    return TestResults(
+            test_name=test_name,
+            statistics={"lower": lower, "upper": upper},
+            details={test_name: [f"Estimated using the {distribution.name} distribution"]},
+    )
+
+
 def _compute_pvalue(test_stat: Union[float, int, np.floating, np.integer],
                     distribution: Union[str, distributions.rv_continuous, distributions.rv_discrete],
                     *,
                     df: Union[int, float, None] = None,
                     df_denom: Union[int, float, None] = None,
                     alternative: str = "two-sided",
-                    ) -> Union[TestResults, float, int, np.ndarray]:
+                    **kwargs) -> Union[TestResults, float, int, np.ndarray]:
     """Compute a p-value from a test statistic and reference distribution.
 
     Parameters
     ----------
     test_stat : float, int, or np.ndarray
         The observed test statistic (scalar or array).
-    distribution : str or scipy.stats distribution object
-        Name of the reference distribution.  One of ``"t"``, ``"z"``, ``"f"``, or ``"chi2"`` (case-insensitive).
+    distribution : str
+        The name of the distribution to retrieve (case-insensitive), see researchpy.statistics._get_distribution.
+        Currently supported distributions include:
+        - "t" or "student's t" for Student's t-distribution
+        - "z" or "normal" for Standard normal distribution
+        - "f" for Fisher–Snedecor F-distribution
+        - "chi2" or "chi-squared" for Chi-squared distribution
+        - "bernoulli" or "ber" for Bernoulli distribution
+        - "binomial" or "bin" for Binomial distribution
+        - "poisson" or "poi" for Poisson distribution
     df : int or float, optional
         Degrees of freedom.  Required for ``"t"``, ``"chi2"``, and ``"f"`` (numerator df for F).
     df_denom : int or float, optional
@@ -242,8 +361,7 @@ def _compute_pvalue(test_stat: Union[float, int, np.floating, np.integer],
     Raises
     ------
     ValueError
-        If *distribution* is not recognised, required degrees of freedom
-        are missing, or *alternative* is invalid.
+        If *distribution* is not recognised, required degrees of freedom are missing, or *alternative* is invalid.
 
     Examples
     --------
@@ -262,7 +380,7 @@ def _compute_pvalue(test_stat: Union[float, int, np.floating, np.integer],
     """
     # -- Importing scipy.stats.distributions -- #
     if isinstance(distribution, str):
-        distribution = get_distribution(distribution)
+        distribution = _get_distribution(distribution)
     elif isinstance(distribution, (distributions.rv_continuous, distributions.rv_discrete)):
         pass
     else:
@@ -328,16 +446,3 @@ def _compute_pvalue(test_stat: Union[float, int, np.floating, np.integer],
         )
 
     return pvalue
-
-
-
-
-
-
-
-
-
-
-
-
-

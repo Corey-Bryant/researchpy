@@ -11,7 +11,7 @@ import formulaic
 import pandas as pd
 from pandas import DataFrame
 
-from researchpy.statistics import compute_pvalue
+from researchpy.statistics import _compute_pvalue
 from researchpy.models.linear.linear_model import LinearModel
 from researchpy.containers import ModelResults, FactorEffects, Term
 from researchpy.utility import as_numeric
@@ -153,7 +153,7 @@ class Anova(LinearModel):
 
         # F-statistic and p-value
         f_value = msr_f / mse
-        f_p_value = compute_pvalue(
+        f_p_value = _compute_pvalue(
             f_value, "f", df=df_factor, df_denom=df_residual, alternative="greater"
         )
 

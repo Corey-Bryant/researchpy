@@ -13,7 +13,7 @@ from researchpy.optimize import (
     IRLS,
 )
 
-from researchpy.statistics import compute_pvalue
+from researchpy.statistics import _compute_pvalue
 
 
 
@@ -94,7 +94,7 @@ class GeneralizedLinearModel(BaseModel):
             self.fit()
 
             # -- Compute standard errors and statistics --
-            self._compute_statistics(confidence=conf_level)
+            self._compute_coef_stats(confidence=conf_level)
 
             # -- Build ModelResults (results() sets self.ModelResults internally)
             self.results(report_betas_as=report_betas_as, return_type="Dataframe", pretty_format=True)
@@ -180,7 +180,6 @@ class GeneralizedLinearModel(BaseModel):
                                               )
 
         else:
-            #if self.SolverOptions.algorithm == "newton-raphson": self.SolverOptions.algorithm = 'Newton-CG'
             result = mle_estimation_principal(fun=self._neg_log_likelihood, x0=self.CoefResults.betas.flatten(),
                                               jac=self._gradient_neg_log_likelihood,
                                               method=self.SolverOptions.algorithm, callback=None,
@@ -232,6 +231,87 @@ class GeneralizedLinearModel(BaseModel):
         else:
             if self.SolverOptions.display:
                 print(f"Warning: {self.SolverOptions.estimation_method} using {self.SolverOptions.algorithm} did not converge ({result.message})")
+
+
+
+    def _compute_coef_stats(self, confidence=0.95, distribution="normal", dof=None):
+        """
+        Compute standard errors, Wald test statistics, p-values, and
+        confidence intervals using the GLM Fisher information matrix.
+
+        Uses the Family instance from ModelDesignSpec to compute working
+        weights generically across distribution families.
+
+        Notes
+        -----
+        Covariance matrix: Cov(β) = φ · (X'WX)^{-1}
+        where W = diag(working_weights) and φ is the dispersion parameter
+        (φ = 1 for binomial and Poisson; estimated for Gaussian/Gamma).
+
+        For Gaussian family: φ = RSS / (n − k), the mean squared error.
+
+        Wald statistic: z = β / SE(β)  [or t for models with estimated dispersion]
+
+        References
+        ----------
+        McCullagh & Nelder (1989), §2.4 — Estimation of the dispersion parameter.
+        """
+        family = self.ModelDesignSpec.family
+        eta = self.IV @ self.CoefResults.betas       # linear predictor
+        mu = family.link_inverse(eta)                # fitted values
+        w = family.working_weights(eta).reshape(-1, 1)  # GLM working weights
+
+
+        # ---------------------------------------------------------------
+        # Estimate dispersion parameter φ via the family.
+        # Binomial and Poisson return φ = 1 (known);
+        # Gaussian and Gamma estimate from the Pearson chi-squared statistic:
+        #   φ_hat = Σ[(y - μ)² / V(μ)] / (n - k)
+        # ---------------------------------------------------------------
+        self.FitStatistics.scale_parameter = family.estimate_dispersion(
+            self.DV, mu, self.n, self.k
+        )
+
+        # ---------------------------------------------------------------
+        # Covariance matrix: Cov(β) = φ · (X'WX)^{-1}
+        #
+        # Computed via QR decomposition of the weighted design matrix
+        # for numerical stability (avoids issues with direct inversion
+        # when the information matrix is near-singular):
+        #   X_w = X · √W  →  QR = X_w  →  (X'WX)^{-1} = (R'R)^{-1} = R^{-1} R'^{-1}
+        #
+        # This mirrors the lstsq approach used by the IRLS solver.
+        # ---------------------------------------------------------------
+        dispersion = self.FitStatistics.scale_parameter
+        sqrt_w = np.sqrt(np.clip(w, 1e-15, None))
+        X_weighted = self.IV * sqrt_w  # (n, k) weighted design matrix
+
+        try:
+            # QR decomposition: X_w = Q @ R, where R is (k, k) upper-triangular
+            Q, R = np.linalg.qr(X_weighted, mode='reduced')
+            # (X'WX)^{-1} = (R'R)^{-1} = R^{-1} @ R'^{-1}
+            R_inv = np.linalg.inv(R)
+            cov_matrix = dispersion * (R_inv @ R_inv.T)
+
+        except np.linalg.LinAlgError:
+            # Fallback: pseudo-inverse for rank-deficient cases
+            XtWX = self.IV.T @ (self.IV * w)
+            cov_matrix = dispersion * np.linalg.pinv(XtWX)
+
+        self.CoefResults.std_error = np.sqrt(np.diag(cov_matrix)).reshape(-1, 1)
+
+        # Wald test statistics
+        self.CoefResults.test_stat = self.CoefResults.betas / self.CoefResults.std_error
+
+        # P-values: z-test for known dispersion, t-test for estimated
+        if self.CoefResults.test_stat_name == "t":
+            dof = self.n - self.k
+            self.CoefResults.test_pval = _compute_pvalue(self.CoefResults.test_stat, "t", df=dof)
+            self._confidence_interval(distribution="t", dof=dof)
+        else:
+            self.CoefResults.test_pval = _compute_pvalue(self.CoefResults.test_stat, "z")
+            self._confidence_interval(distribution="normal")
+
 
 
     def _compute_statistics(self, confidence=0.95, distribution_name="normal",
@@ -307,14 +387,10 @@ class GeneralizedLinearModel(BaseModel):
         # P-values: z-test for known dispersion, t-test for estimated
         if self.CoefResults.test_stat_name == "t":
             dof = self.n - self.k
-            self.CoefResults.test_pval = compute_pvalue(
-                self.CoefResults.test_stat, "t", df=dof
-            )
+            self.CoefResults.test_pval = _compute_pvalue(self.CoefResults.test_stat, "t", df=dof)
             self._confidence_interval(distribution_name="t", dof=dof)
         else:
-            self.CoefResults.test_pval = compute_pvalue(
-                self.CoefResults.test_stat, "z"
-            )
+            self.CoefResults.test_pval = _compute_pvalue(self.CoefResults.test_stat, "z")
             self._confidence_interval(distribution_name="normal")
 
 

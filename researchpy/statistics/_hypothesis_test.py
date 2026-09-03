@@ -26,26 +26,37 @@ References
 - Casella, G. & Berger, R. L. (2002). *Statistical Inference* (2nd ed.).
   Duxbury.
 """
-from typing import Union
+from researchpy.statistics import _get_distribution
+
+from typing import Union, TYPE_CHECKING
+if TYPE_CHECKING:
+    from scipy.stats import distributions
 
 import numpy as np
-import scipy.stats
 
 def _compute_pvalue(test_stat: Union[float, int, np.floating, np.integer],
-                    distribution: Union[str, scipy.stats.rv_continuous, scipy.stats.rv_discrete],
+                    distribution: str,
                     *,
                     df: Union[int, float, None] = None,
                     df_denom: Union[int, float, None] = None,
                     alternative: str = "two-sided",
-                    ) -> Union[float, int, np.ndarray]:
+                    **kwargs) -> Union[float, int, np.ndarray]:
     """Compute a p-value from a test statistic and reference distribution.
 
     Parameters
     ----------
     test_stat : float, int, or np.ndarray
         The observed test statistic (scalar or array).
-    distribution : str or scipy.stats distribution object
-        Name of the reference distribution.  One of ``"t"``, ``"z"``, ``"f"``, or ``"chi2"`` (case-insensitive).
+    distribution : str
+        The name of the distribution to retrieve (case-insensitive), see researchpy.statistics._get_distribution.
+        Currently supported distributions include:
+        - "t" or "student's t" for Student's t-distribution
+        - "z" or "normal" for Standard normal distribution
+        - "f" for Fisher–Snedecor F-distribution
+        - "chi2" or "chi-squared" for Chi-squared distribution
+        - "bernoulli" or "ber" for Bernoulli distribution
+        - "binomial" or "bin" for Binomial distribution
+        - "poisson" or "poi" for Poisson distribution
     df : int or float, optional
         Degrees of freedom.  Required for ``"t"``, ``"chi2"``, and ``"f"`` (numerator df for F).
     df_denom : int or float, optional
@@ -64,8 +75,7 @@ def _compute_pvalue(test_stat: Union[float, int, np.floating, np.integer],
     Raises
     ------
     ValueError
-        If *distribution* is not recognised, required degrees of freedom
-        are missing, or *alternative* is invalid.
+        If *distribution* is not recognised, required degrees of freedom are missing, or *alternative* is invalid.
 
     Examples
     --------
@@ -84,13 +94,14 @@ def _compute_pvalue(test_stat: Union[float, int, np.floating, np.integer],
     """
     # -- Importing scipy.stats.distributions -- #
     if isinstance(distribution, str):
-        distribution = get_distribution(distribution)
+        distribution = _get_distribution(distribution)
+        if distribution == '': distribution = _get_distribution(distribution, supported_only=False)
     elif isinstance(distribution, (distributions.rv_continuous, distributions.rv_discrete)):
         pass
     else:
         raise ValueError(
-                f"distribution must be a string or a scipy.stats distribution object, got {type(distribution)}. "
-                f"Use get_distribution() to retrieve a distribution by name.",
+                f"distribution must be a string and a name of a distribution to be passed to researchpy.statistics._get_distribution, got {type(distribution)}. "
+                f"Uses _get_distribution() to retrieve a distribution by name.",
         )
 
     # ------------------------------------------------------------------
@@ -150,4 +161,3 @@ def _compute_pvalue(test_stat: Union[float, int, np.floating, np.integer],
         )
 
     return pvalue
-

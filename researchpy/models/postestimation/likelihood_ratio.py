@@ -10,7 +10,7 @@ from numpy import (
     ones, array,
 )
 
-from researchpy.statistics import compute_pvalue
+from researchpy.statistics import _compute_pvalue
 from researchpy.containers import TestResults, FitStatistics
 from researchpy.optimize import (
     IRLS, mle_estimation_principal,
@@ -206,7 +206,7 @@ class LikelihoodRatioTest:
             self.FitStatistics.df_model = self.model.k - 1  # Full model params minus intercept
 
         # p-value from chi-squared distribution
-        self.FitStatistics.test_pval = compute_pvalue(
+        self.FitStatistics.test_pval = _compute_pvalue(
                 self.FitStatistics.test_stat,
                 "chi2",
                 df=self.FitStatistics.df_model,

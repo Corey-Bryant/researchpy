@@ -103,7 +103,8 @@ class LogisticRegression(GeneralizedLinearModel):
             self.fit()
 
             # -- Compute standard errors and statistics --
-            self._compute_statistics()
+            #self._compute_statistics()
+            self._compute_coef_stats()
 
             # -- Build ModelResults (results() sets self.ModelResults internally) --
             self.results(report_betas_as=report_betas_as, return_type="Dataframe", pretty_format=True)

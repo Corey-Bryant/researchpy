@@ -3,6 +3,9 @@ from pandas import DataFrame
 from researchpy.models.base import BaseModel
 from researchpy.containers import ModelResults, ModelEffects, FactorEffects, SolverOptions, Term
 from researchpy.utility import *
+from researchpy.statistics import _compute_pvalue
+
+
 
 
 class LinearModel(BaseModel):
@@ -43,7 +46,6 @@ class LinearModel(BaseModel):
 
     def fit(self):
         from researchpy.optimize import ols_estimation_principal
-        from researchpy.statistics import confidence_interval, compute_pvalue
 
         # Computing the OLS estimates (betas) using the principal method — stored in self.CoefResults.betas
         self.CoefResults.betas = ols_estimation_principal(self.IV, self.DV)
@@ -53,7 +55,8 @@ class LinearModel(BaseModel):
         self._compute_model_effects()
 
         # Compute the standard errors, test statistics, p-values, and confidence intervals for the model coefficients
-        self._compute_statistics()
+        #self._compute_statistics()
+        self._compute_coef_stats()
 
 
     def _compute_model_effects(self):
@@ -66,7 +69,7 @@ class LinearModel(BaseModel):
         self._compute_model_stats()
 
         # Append the model's results to the
-        self.FitStatistics.test_stat_name = "F"
+        #self.FitStatistics.test_stat_name = "F"        # Already defined as "F" by default during initialization
         self.FitStatistics.test_stat = self.ModelEffects.test_stat
         self.FitStatistics.test_pval = self.ModelEffects.test_pval
         self.FitStatistics.df_model = self.ModelEffects.df_model
@@ -118,11 +121,11 @@ class LinearModel(BaseModel):
 
 
         # F-statistic and p-value for the model
-        self.ModelEffects.test_stat_name = "F"
+        self.ModelEffects.test_stat_name = self.FitStatistics.test_stat_name
         self.ModelEffects.test_stat = return_numeric(self.ModelEffects.msr / self.ModelEffects.mse)
 
         self.ModelEffects.test_pval = return_numeric(
-            compute_pvalue(
+            _compute_pvalue(
                     self.ModelEffects.test_stat,
                     "f",
                     df=self.ModelEffects.df_model,
@@ -146,6 +149,46 @@ class LinearModel(BaseModel):
         self.ModelEffects.omega_squared = return_numeric(
             (self.ModelEffects.df_model * (self.ModelEffects.msr - self.ModelEffects.mse)) / (self.ModelEffects.ss_total + self.ModelEffects.mse)
         )
+
+
+    def _compute_coef_stats(self):
+        """
+        Compute the standard errors, test statistics, p-values, and confidence intervals for the model coefficients.
+
+        Uses the Family instance from ModelDesignSpec to compute working
+        weights generically across distribution families.
+
+        Notes
+        -----
+        Covariance matrix: Cov(β) = φ · (X'WX)^{-1}
+        where W = diag(working_weights) and φ is the dispersion parameter
+        (φ = 1 for binomial and Poisson; estimated for Gaussian/Gamma).
+
+        For Gaussian family: φ = RSS / (n − k), the mean squared error.
+
+        t statistic: t = β / SE(β)
+
+        References
+        ----------
+        McCullagh & Nelder (1989), §2.4 — Estimation of the dispersion parameter.
+        """
+        variance_covariance_beta_matrix = self.__variance_covariance_beta_matrix(method="standard",)
+
+        # Standard Errors
+        self.CoefResults.std_error = np.sqrt(np.diag(variance_covariance_beta_matrix)).reshape(-1, 1)
+
+        # t statistics
+        self.CoefResults.test_stat = self.CoefResults.betas * (1 / self.CoefResults.std_error)
+
+        # Two-sided p-value
+        self.CoefResults.test_pval = _compute_pvalue(
+                self.CoefResults.test_stat,
+                self.CoefResults.test_stat_name,
+                df=self.ModelEffects.df_residual,
+                alternative="greater",
+        )
+
+        self._confidence_interval(distribution=self.CoefResults.test_stat_name, dof=self.ModelEffects.df_residual)
 
 
     def _compute_statistics(self):
@@ -178,10 +221,11 @@ class LinearModel(BaseModel):
         self.CoefResults.test_stat = self.CoefResults.betas * (1 / self.CoefResults.std_error)
 
         # Two-sided p-value
-        self.CoefResults.test_pval = compute_pvalue(
+        self.CoefResults.test_pval = _compute_pvalue(
                 self.CoefResults.test_stat,
                 self.CoefResults.test_stat_name,
-                df=self.ModelEffects.df_residual
+                df=self.ModelEffects.df_residual,
+                alternative="greater",
         )
 
         self._confidence_interval(distribution=self.CoefResults.test_stat_name, dof=self.ModelEffects.df_residual)
