@@ -4,6 +4,7 @@ from researchpy.models.base import BaseModel
 from researchpy.containers import ModelResults, ModelEffects, FactorEffects, SolverOptions, Term
 from researchpy.utility import *
 from researchpy.statistics import _compute_pvalue
+from researchpy.optimize import check_conditioning, CONDITION_NUMBER_THRESHOLD
 
 
 
@@ -190,45 +191,11 @@ class LinearModel(BaseModel):
 
         self._confidence_interval(distribution=self.CoefResults.test_stat_name, dof=self.ModelEffects.df_residual)
 
+        # -- OLS is a direct (closed-form) solve: always "converged". --
+        self.Diagnostics.converged = True
 
-    def _compute_statistics(self):
-        """
-        Compute the standard errors, test statistics, p-values, and confidence intervals for the model coefficients.
-
-        Uses the Family instance from ModelDesignSpec to compute working
-        weights generically across distribution families.
-
-        Notes
-        -----
-        Covariance matrix: Cov(β) = φ · (X'WX)^{-1}
-        where W = diag(working_weights) and φ is the dispersion parameter
-        (φ = 1 for binomial and Poisson; estimated for Gaussian/Gamma).
-
-        For Gaussian family: φ = RSS / (n − k), the mean squared error.
-
-        t statistic: t = β / SE(β)
-
-        References
-        ----------
-        McCullagh & Nelder (1989), §2.4 — Estimation of the dispersion parameter.
-        """
-        variance_covariance_beta_matrix = self.__variance_covariance_beta_matrix(method="standard",)
-
-        # Standard Errors
-        self.CoefResults.std_error = np.sqrt(np.diag(variance_covariance_beta_matrix)).reshape(-1, 1)
-
-        # T-statistics
-        self.CoefResults.test_stat = self.CoefResults.betas * (1 / self.CoefResults.std_error)
-
-        # Two-sided p-value
-        self.CoefResults.test_pval = _compute_pvalue(
-                self.CoefResults.test_stat,
-                self.CoefResults.test_stat_name,
-                df=self.ModelEffects.df_residual,
-                alternative="greater",
-        )
-
-        self._confidence_interval(distribution=self.CoefResults.test_stat_name, dof=self.ModelEffects.df_residual)
+        # -- Build diagnostic messages for the summary footer --
+        self.Diagnostics.build_messages()
 
 
     def __variance_covariance_residual_matrix(self, method="standard",):
@@ -244,10 +211,29 @@ class LinearModel(BaseModel):
     def __variance_covariance_beta_matrix(self, method="standard", ):
 
         if method == "standard":
-            try:
-                variance_covariance_beta_matrix = np.asarray(self.ModelEffects.mse * np.linalg.inv(self.IV.T @ self.IV))
-            except np.linalg.LinAlgError:
-                variance_covariance_beta_matrix = np.asarray(self.ModelEffects.mse * np.linalg.pinv(self.IV.T @ self.IV))
+            XtX = self.IV.T @ self.IV
+
+            # inv() won't raise on a *near*-singular matrix; check conditioning explicitly
+            # via the shared numerical diagnostics helper so a rank-deficient design routes
+            # to the pseudo-inverse fallback.
+            conditioning = check_conditioning(XtX, threshold=CONDITION_NUMBER_THRESHOLD)
+
+            if conditioning.rank_deficient:
+                variance_covariance_beta_matrix = np.asarray(self.ModelEffects.mse * np.linalg.pinv(XtX))
+                cov_method = "pseudo-inverse"
+            else:
+                try:
+                    variance_covariance_beta_matrix = np.asarray(self.ModelEffects.mse * np.linalg.inv(XtX))
+                    cov_method = "inverse"
+                except np.linalg.LinAlgError:
+                    variance_covariance_beta_matrix = np.asarray(self.ModelEffects.mse * np.linalg.pinv(XtX))
+                    cov_method = "pseudo-inverse"
+
+            # -- Record numerical diagnostics --
+            self.Diagnostics.condition_number = conditioning.condition_number
+            self.Diagnostics.rank_deficient = conditioning.rank_deficient
+            self.Diagnostics.threshold_used = conditioning.threshold_used
+            self.Diagnostics.cov_method = cov_method
 
         return variance_covariance_beta_matrix
 

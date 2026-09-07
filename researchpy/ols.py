@@ -77,8 +77,7 @@ class ols(model):
         warnings.warn(
             "The `ols` class is deprecated and will be removed in a future version (v0.4.0) -> switch to `Regress` (alias `LM`)."
             "Please use `Regress` (alias `LM`) from researchpy.models.linear instead: "
-            "from researchpy.models import Regress. "
-            "See documentation for migration guide.",
+            "from researchpy.models import Regress. ",
             DeprecationWarning,
             stacklevel=2
         )
@@ -223,13 +222,6 @@ class ols(model):
         # Two-sided p-value
         t_p_values = numpy.array([numpy.asarray(scipy.stats.t.sf(numpy.abs(
             t), self.model_data["degrees_of_freedom_residual"]) * 2).item() for t in t_stastics])
-
-        ## Creating variable table information
-        regression_description_info = {
-
-            self._DV_design_info.term_names[0]: ["Coef.", "Std. Err.", "t", "p-value", "95% Conf. Interval"],
-
-        }
 
         regression_info = {self._DV_design_info.term_names[0]: [],
                            "Coef.": [],

@@ -1,18 +1,16 @@
 import numpy as np
 
 from researchpy.containers import SolverOptions, ModelResults
-
 from researchpy.models.base import BaseModel
 from researchpy.models.postestimation import (
-    LikelihoodRatioTest, predict
+    LikelihoodRatioTest, predict, detect_separation
 )
 from researchpy.optimize import (
     OptimizationTracker,
     ols_estimation_principal, mle_estimation_principal,
     neg_log_likelihood, gradient_neg_log_likelihood,
-    IRLS,
+    IRLS, check_conditioning, CONDITION_NUMBER_THRESHOLD,
 )
-
 from researchpy.statistics import _compute_pvalue
 
 
@@ -47,8 +45,8 @@ class GeneralizedLinearModel(BaseModel):
                 estimation_method="mle",
                 obj_function="log-likelihood",
                 algorithm="IRLS",
-                tol=1e-7,
-                tolerance=1e-7,
+                tol=1e-6,
+                tolerance=1e-6,
                 logtolerance=0,
                 max_iter=300,
                 display=True,
@@ -104,34 +102,55 @@ class GeneralizedLinearModel(BaseModel):
                 self.summary()
 
 
-    def _initialize_betas(self, initial_betas=None, initial_betas_method=None):
+    def _initialize_betas(self, initial_betas: object = None, initial_betas_method: object = None) -> str | None:
+        """
+        Initialize the model coefficients (betas) based on user input or default methods.
 
+        Priority of initialization:
+            1. If `initial_betas` is provided, use it directly.
+            2. If `initial_betas_method` using ordinary least-squares if the corresponding method (e.g., "ols") if specified.
+            3. If neither is provided, use default initialization based on the model type (e.g., zeros for logistic regression). Default initialization is an array of ones with shape (k, 1), where k is the number of coefficients.
+        """
+
+        # -- Check for conflicting initialization options --#
         if initial_betas is not None and initial_betas_method is not None:
-            return("Warning: Both initial_betas and initial_betas_method were provided. Ignoring initial_betas_method and using provided initial_betas.")
+            return(
+                "Warning: Both initial_betas and initial_betas_method were provided."
+                "Ignoring initial_betas_method and using provided initial_betas."
+            )
 
-        if initial_betas is not None:
+        # -- Initialize betas based on user-provided values --#
+        elif initial_betas is not None:
             if isinstance(initial_betas, np.ndarray) and initial_betas.shape == (self.k, 1):
                 self.CoefResults.betas = initial_betas
             else:
                 raise ValueError(f"initial_betas must be a numpy array of shape ({self.k}, 1), but got {initial_betas.shape}")
 
-        elif initial_betas_method.lower() == "ols":
-            self.CoefResults.betas = ols_estimation_principal(self.IV, self.DV)
-
-
-        # Default initialization based on model type
-        else:
+        # -- Initialize betas ussing an array of zeros --#
+        elif initial_betas_method == "zeros":
+            betas = np.zeros((self.k, 1))
             if self.__name__ in ["researchpy.LogisticRegression", "researchpy.Logit"]:
-                """Initialize betas with smarter starting values."""
-                # Start with zeros (better than OLS for binary outcomes)
-                betas = np.ones((self.n, self.k))
-
                 # Set intercept to log odds of outcome proportion
                 y_mean = np.mean(self.DV)
                 if 0 < y_mean < 1:
                     betas[0] = np.log(y_mean / (1 - y_mean))
+            self.CoefResults.betas = betas
 
-                self.CoefResults.betas = betas.reshape(-1, 1)
+        # -- Initialize betas using an array of ones --#
+        elif initial_betas_method == "ones":
+            self.CoefResults.betas = np.ones((self.k, 1))
+
+        # -- Initialize betas using random values --#
+        elif initial_betas_method == "random":
+            self.CoefResults.betas = np.random.rand(self.k, 1)
+
+        # -- Initialize betas using ordinary least-squares --#
+        elif initial_betas_method.lower() == "ols":
+            self.CoefResults.betas = ols_estimation_principal(self.IV, self.DV)
+
+        else:
+            # Default initialization for generalized models: array of ones
+            self.CoefResults.betas = np.ones((self.k, 1))
 
 
     def _neg_log_likelihood(self, params, *args, **kwargs):
@@ -160,7 +179,7 @@ class GeneralizedLinearModel(BaseModel):
     def fit(self):
         # Initialize betas if not already set (default is empty list from CoefResults)
         if not isinstance(self.CoefResults.betas, np.ndarray) or self.CoefResults.betas.size == 0:
-            self.CoefResults.betas = np.zeros((self.k, 1))
+            self.CoefResults.betas = np.ones((self.k, 1))
 
 
         if self.SolverOptions.display:
@@ -175,19 +194,27 @@ class GeneralizedLinearModel(BaseModel):
                                                                "DV": self.DV,
                                                                "display": self.SolverOptions.display,}
 
-            result = mle_estimation_principal(lambda p, *a: 0, x0=self.CoefResults.betas.flatten(), method=IRLS,
-                                              callback=None, options=options
+            result = mle_estimation_principal(lambda p, *a: 0, x0=self.CoefResults.betas.flatten(),
+                                              method=IRLS,
+                                              callback=None,
+                                              options=options
                                               )
 
         else:
-            result = mle_estimation_principal(fun=self._neg_log_likelihood, x0=self.CoefResults.betas.flatten(),
+            result = mle_estimation_principal(fun=self._neg_log_likelihood,
+                                              x0=self.CoefResults.betas.flatten(),
                                               jac=self._gradient_neg_log_likelihood,
-                                              method=self.SolverOptions.algorithm, callback=None,
+                                              method=self.SolverOptions.algorithm,
+                                              callback=None,
                                               options=self.SolverOptions.to_scipy_options()
                                               )
 
 
         # -- Evaluating if the optimization converged and storing results accordingly. -- #
+        # -- Record convergence diagnostics regardless of outcome --
+        self.Diagnostics.converged = bool(result.success)
+        self.Diagnostics.n_iterations = getattr(result, "nit", None) or getattr(result, "nfev", None)
+
         if result.success:
             self.CoefResults.betas = result.x.reshape(-1, 1)
             self.FitStatistics.log_likelihood = -result.fun
@@ -231,7 +258,6 @@ class GeneralizedLinearModel(BaseModel):
         else:
             if self.SolverOptions.display:
                 print(f"Warning: {self.SolverOptions.estimation_method} using {self.SolverOptions.algorithm} did not converge ({result.message})")
-
 
 
     def _compute_coef_stats(self, confidence=0.95, distribution="normal", dof=None):
@@ -286,19 +312,56 @@ class GeneralizedLinearModel(BaseModel):
         sqrt_w = np.sqrt(np.clip(w, 1e-15, None))
         X_weighted = self.IV * sqrt_w  # (n, k) weighted design matrix
 
+        cov_method = "inverse"
+        conditioning = None
+
         try:
             # QR decomposition: X_w = Q @ R, where R is (k, k) upper-triangular
             Q, R = np.linalg.qr(X_weighted, mode='reduced')
+
+            # inv() won't raise on *near*-singular R, so check conditioning
+            # explicitly via the shared numerical diagnostics helper.
+            conditioning = check_conditioning(R, threshold=CONDITION_NUMBER_THRESHOLD)
+            if conditioning.rank_deficient:
+                raise np.linalg.LinAlgError(
+                    f"Ill-conditioned R (cond={conditioning.condition_number:.2e})"
+                )
+
             # (X'WX)^{-1} = (R'R)^{-1} = R^{-1} @ R'^{-1}
             R_inv = np.linalg.inv(R)
             cov_matrix = dispersion * (R_inv @ R_inv.T)
 
         except np.linalg.LinAlgError:
-            # Fallback: pseudo-inverse for rank-deficient cases
+            # Fallback: pseudo-inverse for rank-deficient / ill-conditioned cases
             XtWX = self.IV.T @ (self.IV * w)
             cov_matrix = dispersion * np.linalg.pinv(XtWX)
+            cov_method = "pseudo-inverse"
 
-        self.CoefResults.std_error = np.sqrt(np.diag(cov_matrix)).reshape(-1, 1)
+        # Post-hoc guard: NaN/negative variance means numerical failure, not a valid SE
+        diag = np.diag(cov_matrix)
+        if not np.all(np.isfinite(diag)) or np.any(diag < 0):
+            XtWX = self.IV.T @ (self.IV * w)
+            cov_matrix = dispersion * np.linalg.pinv(XtWX)
+            diag = np.diag(cov_matrix)
+            cov_method = "pseudo-inverse"
+
+        self.CoefResults.std_error = np.sqrt(np.maximum(diag, 0.0)).reshape(-1, 1)
+
+        # -- Record numerical diagnostics --
+        if conditioning is not None:
+            self.Diagnostics.condition_number = conditioning.condition_number
+            self.Diagnostics.rank_deficient = conditioning.rank_deficient
+            self.Diagnostics.threshold_used = conditioning.threshold_used
+        self.Diagnostics.cov_method = cov_method
+
+        # -- Statistical model-fit diagnostics: separation (binomial only) --
+        if getattr(family, "name", "").lower() == "binomial":
+            sep = detect_separation(mu, warn=True)
+            self.Diagnostics.separation_status = sep.status
+            self.Diagnostics.boundary_fitted_count = sep.boundary_count
+
+        # -- Build diagnostic messages for the summary footer --
+        self.Diagnostics.build_messages()
 
         # Wald test statistics
         self.CoefResults.test_stat = self.CoefResults.betas / self.CoefResults.std_error
@@ -313,89 +376,11 @@ class GeneralizedLinearModel(BaseModel):
             self._confidence_interval(distribution="normal")
 
 
-
-    def _compute_statistics(self, confidence=0.95, distribution_name="normal",
-                             distribution_object=None, dof=None):
-        """
-        Compute standard errors, Wald test statistics, p-values, and
-        confidence intervals using the GLM Fisher information matrix.
-
-        Uses the Family instance from ModelDesignSpec to compute working
-        weights generically across distribution families.
-
-        Notes
-        -----
-        Covariance matrix: Cov(β) = φ · (X'WX)^{-1}
-        where W = diag(working_weights) and φ is the dispersion parameter
-        (φ = 1 for binomial and Poisson; estimated for Gaussian/Gamma).
-
-        For Gaussian family: φ = RSS / (n − k), the mean squared error.
-
-        Wald statistic: z = β / SE(β)  [or t for models with estimated dispersion]
-
-        References
-        ----------
-        McCullagh & Nelder (1989), §2.4 — Estimation of the dispersion parameter.
-        """
-        family = self.ModelDesignSpec.family
-        eta = self.IV @ self.CoefResults.betas       # linear predictor
-        mu = family.link_inverse(eta)                # fitted values
-        w = family.working_weights(eta).reshape(-1, 1)  # GLM working weights
-
-
-        # ---------------------------------------------------------------
-        # Estimate dispersion parameter φ via the family.
-        # Binomial and Poisson return φ = 1 (known);
-        # Gaussian and Gamma estimate from the Pearson chi-squared statistic:
-        #   φ_hat = Σ[(y - μ)² / V(μ)] / (n - k)
-        # ---------------------------------------------------------------
-        self.FitStatistics.scale_parameter = family.estimate_dispersion(
-            self.DV, mu, self.n, self.k
-        )
-
-        # ---------------------------------------------------------------
-        # Covariance matrix: Cov(β) = φ · (X'WX)^{-1}
-        #
-        # Computed via QR decomposition of the weighted design matrix
-        # for numerical stability (avoids issues with direct inversion
-        # when the information matrix is near-singular):
-        #   X_w = X · √W  →  QR = X_w  →  (X'WX)^{-1} = (R'R)^{-1} = R^{-1} R'^{-1}
-        #
-        # This mirrors the lstsq approach used by the IRLS solver.
-        # ---------------------------------------------------------------
-        dispersion = self.FitStatistics.scale_parameter
-        sqrt_w = np.sqrt(np.clip(w, 1e-15, None))
-        X_weighted = self.IV * sqrt_w  # (n, k) weighted design matrix
-
-        try:
-            # QR decomposition: X_w = Q @ R, where R is (k, k) upper-triangular
-            Q, R = np.linalg.qr(X_weighted, mode='reduced')
-            # (X'WX)^{-1} = (R'R)^{-1} = R^{-1} @ R'^{-1}
-            R_inv = np.linalg.inv(R)
-            cov_matrix = dispersion * (R_inv @ R_inv.T)
-
-        except np.linalg.LinAlgError:
-            # Fallback: pseudo-inverse for rank-deficient cases
-            XtWX = self.IV.T @ (self.IV * w)
-            cov_matrix = dispersion * np.linalg.pinv(XtWX)
-
-        self.CoefResults.std_error = np.sqrt(np.diag(cov_matrix)).reshape(-1, 1)
-
-        # Wald test statistics
-        self.CoefResults.test_stat = self.CoefResults.betas / self.CoefResults.std_error
-
-        # P-values: z-test for known dispersion, t-test for estimated
-        if self.CoefResults.test_stat_name == "t":
-            dof = self.n - self.k
-            self.CoefResults.test_pval = _compute_pvalue(self.CoefResults.test_stat, "t", df=dof)
-            self._confidence_interval(distribution_name="t", dof=dof)
-        else:
-            self.CoefResults.test_pval = _compute_pvalue(self.CoefResults.test_stat, "z")
-            self._confidence_interval(distribution_name="normal")
-
-
+    #-----------------------------------------------------------------------------------#
+    # Post-estimation methods (predict, results, summary) are inherited from BaseModel. #
+    # Subclasses can override these methods if needed for specialized behavior.         #
+    #-----------------------------------------------------------------------------------#
     def predict(self, estimate=None, trans=None, decimals=4, **kwargs):
-
         return predict(self, estimate=estimate, trans=trans, decimals=decimals, **kwargs)
 
 

@@ -141,7 +141,7 @@ def IRLS(fun: object, x0: object, args: object = (), **options: object) -> Optim
     converged = False
     prev_deviance = inf
 
-    for iteration in range(1, max_iter + 1):
+    for iteration in range(0, max_iter + 1):
         # Step 1: Linear predictor
         eta = IV @ betas
 
@@ -185,7 +185,7 @@ def IRLS(fun: object, x0: object, args: object = (), **options: object) -> Optim
 
         betas = betas_new
 
-        if deviance_change < gtol and iteration > 1:
+        if deviance_change < gtol:
             converged = True
             if display:
                 print(f"IRLS converged in {iteration} iterations ")

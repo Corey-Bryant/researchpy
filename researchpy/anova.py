@@ -71,15 +71,12 @@ class anova(ols):
                 Omega squared ('Omega squared')
 
     """
-
-
     def __init__(self, formula_like, data={}, sum_of_squares=3):
         # Issue deprecation warning
         warnings.warn(
             "The `anova` class is deprecated and will be removed in a future version (v0.4.0) -> switch to `Anova` (alias `ANOVA`)."
             "Please use `Anova` (alias `ANOVA`) from researchpy.models.linear instead: "
-            "from researchpy.models import Anova. "
-            "See documentation for migration guide.",
+            "from researchpy.models import Anova. ",
             DeprecationWarning,
             stacklevel=2
         )

@@ -51,8 +51,17 @@ def _infer_numeric_from_string(value: str, decimal_format: str = '.') -> tuple[f
     # Strip whitespace
     s = value.strip()
 
+    # Honor a non-standard decimal separator (e.g. ',' for many European
+    # locales). When one is configured, a literal '.' is NOT a valid decimal
+    # separator, so inference must fail; the locale separator is normalized to
+    # '.' for parsing.
+    if decimal_format != '.':
+        if '.' in s:
+            return value, False
+        s = s.replace(decimal_format, '.')
+
     # Check if it looks like an integer (no decimal point or exponent notation)
-    has_decimal = decimal_format in s
+    has_decimal = '.' in s
     has_exponent = 'e' in s.lower()
 
     if not has_decimal and not has_exponent:
@@ -209,9 +218,10 @@ def as_numeric(value: object,
 
     else:
         if numeric_dtype == any:
-            # Use inference for non-numpy types
+            # Use inference for non-numpy types. Pass ``any`` (not ``float``) so already-int values
+            # are preserved instead of being widened.
             result, success = _infer_numeric_from_string(str(value)) if isinstance(value, str) else (
-                _to_numeric(value, float), True
+                _to_numeric(value, any), True
                 )
 
             if not success:
@@ -227,7 +237,9 @@ def as_numeric(value: object,
             try:
                 return _to_numeric(value, numeric_dtype, ndigits)
             except (TypeError, ValueError):
-                if errors == "raise":
+                if errors == "fallback" and numeric_dtype != float:
+                    return _to_numeric(value, float, ndigits)
+                elif errors == "raise":
                     raise ValueError(f"Cannot convert {value} to {numeric_dtype.__name__}.")
                 else:
                     return value
@@ -398,17 +410,18 @@ def base_table(high_level_term_info, mapping_info, info_terms, reg_table):
                     term_levels["term_level_cleaned"].append(value)
 
     # Creating the third table #
-    current_terms = (pd.DataFrame.from_dict(
-        mapping_info, orient="index")).reset_index()
+    current_terms = (pd.DataFrame.from_dict(mapping_info, orient="index")).reset_index()
     current_terms.columns = [dv, "term_level_cleaned"]
     current_terms["term_cleaned"] = [patsy_term_cleaner(key) for key in mapping_info.keys()]
 
     # Joining the tables together #
     table = pd.merge(terms, pd.DataFrame.from_dict(term_levels),
-                     how="left", on="term_cleaned")
+                     how="left",
+                     on="term_cleaned")
 
     table = pd.merge(table, current_terms,
-                     how="left", on=["term_cleaned", "term_level_cleaned"])
+                     how="left",
+                     on=["term_cleaned", "term_level_cleaned"])
 
     #table = pd.merge(table, pd.DataFrame.from_dict(reg_table), how="left", on=dv)
     table = pd.merge(table, pd.DataFrame.from_dict(reg_table).astype(object), how="left", on=dv)  # From dev3.7.1

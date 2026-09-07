@@ -4,7 +4,7 @@
 >
 > **Location:** `researchpy/engine/`
 >
-> **Public API:** `from researchpy.engine import SyntaxParser, MatrixEngine, TableEngine, TableSpec, TableTermSpec, as_continuous, as_categorical`
+> **Public API:** `from researchpy.engine import SyntaxParser, MatrixEngine, TableEngine, TableSpec, TableTermSpec, _validate_columns`
 
 ---
 
@@ -248,19 +248,6 @@ Decision tree:
     │   └── → by + over (pivot)
     └── Not star expansion?
         └── → sub_specs (mixed, each term gets TableTermSpec)
-```
-
-### Conversion Utilities
-
-```python
-# Strip all C() wrappers → treat as continuous
-as_continuous("y ~ C(x) + C(k)")     # → "y ~ x + k"
-
-# Wrap bare variable names in C() → treat as categorical
-as_categorical("y ~ x + k")          # → "y ~ C(x) + C(k)"
-
-# Smart wrapping (only non-numeric columns wrapped when data provided)
-as_categorical("y ~ x + age", data=df)  # → "y ~ C(x) + age"  (if age is numeric)
 ```
 
 ### Validation
@@ -659,8 +646,6 @@ __all__ = [
     "TableEngine",       # Layer 3: result table assembly
     "TableSpec",         # Table layout specification
     "TableTermSpec",     # Per-term layout metadata
-    "as_continuous",     # Utility: strip C() wrappers
-    "as_categorical",    # Utility: add C() wrappers
 ]
 ```
 
@@ -673,7 +658,7 @@ researchpy/engine/
 ├── __init__.py      # Package exports (FormulaSpec, MatrixEngine, TableEngine, etc.)
 ├── syntax.py        # Layer 1: FormulaSpec, _parse_formula, _args_to_formula,
 │                    #          _is_star_expansion, _build_sub_specs,
-│                    #          as_continuous, as_categorical, _validate_columns
+│                    #          _validate_columns
 ├── matrix.py        # Layer 2: MatrixEngine (from_formula, from_spec,
 │                    #          hat_matrix, j_matrix, identity_matrix, eigenvalues)
 └── table.py         # Layer 3: TableTermSpec, TableSpec, TableEngine
@@ -693,8 +678,6 @@ researchpy/engine/
 | `_parse_formula()` | Private | Parses formula string → `FormulaSpec` via `ModelTerms.from_formula()` |
 | `_is_star_expansion()` | Private | Detects if main effects + interactions form a star expansion |
 | `_build_sub_specs()` | Private | Builds `TableTermSpec` list for mixed formulas |
-| `as_continuous()` | Public | Strips `C()` wrappers from formula |
-| `as_categorical()` | Public | Adds `C()` wrappers to bare variable names |
 | `_validate_columns()` | Private | Checks column names exist in DataFrame |
 
 ### `engine/matrix.py`

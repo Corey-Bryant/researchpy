@@ -48,12 +48,11 @@ class LogisticRegression(GeneralizedLinearModel):
     Logistic : Alias for LogisticRegression
     """
 
-    def __init__(self, formula, data=None, conf_level=0.95,
-                 report_betas_as="or",
+    def __init__(self, formula, data=None, conf_level=0.95, report_betas_as="or",
                  solver_options=None,
                  table_decimals=None,
                  initial_betas=None,
-                 initial_betas_method="ols",
+                 initial_betas_method="zeros",
                  fit=True,
                  display_summary=True,):
 
@@ -68,8 +67,8 @@ class LogisticRegression(GeneralizedLinearModel):
                 estimation_method="mle",
                 algorithm="IRLS",
                 obj_function="log-likelihood",
-                tol=1e-7,
-                tolerance=1e-7,
+                tol=1e-6,
+                tolerance=1e-6,
                 logtolerance=0,
                 max_iter=300,
                 display=True,
@@ -103,7 +102,8 @@ class LogisticRegression(GeneralizedLinearModel):
             self.fit()
 
             # -- Compute standard errors and statistics --
-            #self._compute_statistics()
+            # (separation and conditioning diagnostics are detected within
+            #  _compute_coef_stats and recorded on self.Diagnostics)
             self._compute_coef_stats()
 
             # -- Build ModelResults (results() sets self.ModelResults internally) --
@@ -115,8 +115,6 @@ class LogisticRegression(GeneralizedLinearModel):
 
 
     def predict(self, estimate="y", trans=None, decimals=4, **kwargs):
-
-        #return super().predict(self, estimate=estimate, trans=expit)
         return predict(self, estimate=estimate, trans=trans, decimals=decimals)
 
     #--------------------------------------------------------------------------------------#

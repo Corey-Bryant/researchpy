@@ -298,6 +298,121 @@ class FitStatistics(CoreDataclass):
 
 
 
+@dataclass
+class ModelDiagnostics(CoreDataclass):
+    """
+    Container for optimization and model-fit diagnostics.
+
+    Aggregates numerical diagnostics from the estimation/covariance step
+    (matrix conditioning, convergence) and statistical model-fit
+    diagnostics (separation in logistic models).  Populated during model
+    fitting and rendered as a footer block by ``model.summary()`` only when
+    ``messages`` is non-empty.
+
+    Attributes
+    ----------
+    converged : bool, optional
+        Whether the optimizer reported successful convergence.
+    n_iterations : int, optional
+        Number of iterations performed by the solver.
+    condition_number : float, optional
+        Condition number of the (weighted) information matrix used for the
+        covariance computation. Large values indicate ill-conditioning.
+    rank_deficient : bool, optional
+        True when the design/information matrix is rank-deficient or its
+        condition number exceeds ``threshold_used``.
+    cov_method : str, optional
+        Method used to compute the covariance matrix:
+        ``"inverse"`` (standard) or ``"pseudo-inverse"`` (fallback).
+    threshold_used : float, optional
+        Condition-number threshold used to flag ill-conditioning.
+    separation_status : str, optional
+        Logistic-regression separation status:
+        ``"none"``, ``"quasi"``, or ``"complete"``. ``None`` for models
+        where separation is not applicable (e.g., OLS).
+    boundary_fitted_count : int, optional
+        Count of fitted probabilities numerically at 0 or 1 (GLM only;
+        ``None`` for OLS).
+    messages : list of str
+        Human-readable diagnostic messages rendered in the summary footer.
+    """
+
+    converged: Optional[bool] = None
+    n_iterations: Optional[int] = None
+    condition_number: Optional[float] = None
+    rank_deficient: Optional[bool] = None
+    cov_method: Optional[str] = None
+    threshold_used: Optional[float] = None
+    separation_status: Optional[str] = None
+    boundary_fitted_count: Optional[int] = None
+    messages: list = field(default_factory=list)
+
+    def __post_init__(self):
+        self.__name__ = "Researchpy.ModelDiagnostics"
+
+
+    def build_messages(self) -> list:
+        """
+        Build the ordered list of diagnostic messages from the current fields.
+
+        This is the single source of truth for diagnostic message wording.
+        Each entry is a ``(severity, text)`` tuple where *severity* is
+        ``"Warning"`` (inference unreliable) or ``"Note"`` (informational).
+        The result is also stored on ``self.messages`` for summary rendering.
+
+        Returns
+        -------
+        list of tuple
+            ``(severity, text)`` pairs, warnings before notes.
+        """
+        messages = []
+
+        # -- Statistical model-fit diagnostics --
+        if self.separation_status == "complete":
+            messages.append((
+                "Warning",
+                "Complete separation detected. Some fitted probabilities are "
+                "numerically 0 or 1; coefficient estimates and standard errors "
+                "are unreliable."
+            ))
+        elif self.separation_status == "quasi":
+            messages.append((
+                "Warning",
+                "Quasi-complete separation detected. Standard errors for one "
+                "or more terms may be inflated."
+            ))
+
+        # -- Numerical conditioning diagnostics --
+        if self.rank_deficient:
+            cond = self.condition_number if self.condition_number is not None else float("nan")
+            thr = self.threshold_used if self.threshold_used is not None else float("nan")
+            messages.append((
+                "Warning",
+                f"Design matrix is ill-conditioned (condition number = {cond:.2e}, "
+                f"threshold = {thr:.2e}). Covariance computed via pseudo-inverse; "
+                f"standard errors may be unstable."
+            ))
+        elif self.cov_method == "pseudo-inverse":
+            messages.append((
+                "Warning",
+                "Covariance matrix computed via pseudo-inverse due to a "
+                "singular information matrix."
+            ))
+
+        # -- Convergence diagnostics --
+        if self.converged is False:
+            n_iter = self.n_iterations if self.n_iterations is not None else "the maximum number of"
+            messages.append((
+                "Note",
+                f"Model did not fully converge after {n_iter} iterations. "
+                f"Results should be interpreted with caution."
+            ))
+
+        self.messages = messages
+        return messages
+
+
+
 
 @dataclass
 class ModelEffects(CoreDataclass):

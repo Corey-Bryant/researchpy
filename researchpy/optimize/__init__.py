@@ -11,7 +11,6 @@ Usage:
     >>> from researchpy.optimize.objective_functions import neg_log_likelihood
 
 """
-
 from researchpy.optimize.objective_functions import (
     neg_log_likelihood,
     gradient_neg_log_likelihood,
@@ -19,13 +18,13 @@ from researchpy.optimize.objective_functions import (
 from researchpy.optimize.algorithms import (
     IRLS,
 )
-
 from researchpy.optimize.solvers import (
     ols_estimation_principal, lstsq_estimation_principal, mle_estimation_principal,
 )
-
-from researchpy.optimize.trackers import OptimizationTracker
-
+from researchpy.optimize._optimize import OptimizationTracker, ModelWarning
+from researchpy.optimize.diagnostics import (
+    check_conditioning, ConditioningResult, CONDITION_NUMBER_THRESHOLD,
+)
 
 __all__ = [
     "neg_log_likelihood",
@@ -34,5 +33,9 @@ __all__ = [
     "lstsq_estimation_principal",
     "mle_estimation_principal",
     "IRLS",
+    "ModelWarning",
     "OptimizationTracker",
+    "check_conditioning",
+    "ConditioningResult",
+    "CONDITION_NUMBER_THRESHOLD",
 ]

@@ -1,7 +1,19 @@
-from typing import Any
+"""
 
+This module provides optimization solvers for statistical models including:
+ * Ordinary Least Squares (OLS),
+ * Least Squares (LSTSQ), and
+ * Maximum Likelihood Estimation (MLE).
+
+The solvers are designed to work with the ResearchPy framework and can be used for
+fitting generalized linear models (GLMs) and other statistical models. The solvers
+leverage the scipy.optimize.minimize interface for MLE and provide specialized
+implementations for OLS and LSTSQ using linear algebra techniques.
+
+"""
 from numpy import asarray, ndarray, linalg
 from scipy.optimize import minimize, OptimizeResult
+
 
 
 

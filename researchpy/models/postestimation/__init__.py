@@ -34,6 +34,9 @@ from researchpy.models.postestimation.predict import (
     predict, leverage, studentized_residuals, standardized_residuals,
     _compute_hat_matrix, residuals, predict_y
 )
+from researchpy.models.postestimation.separation import (
+    detect_separation, SeparationResult
+)
 
 
 # Define what gets exported with "from researchpy.models.postestimation import *"
@@ -46,6 +49,8 @@ __all__ = [
     "standardized_residuals",
     "_compute_hat_matrix",
     "residuals",
-    "predict_y"
+    "predict_y",
+    "detect_separation",
+    "SeparationResult",
 ]
 

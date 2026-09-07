@@ -4,9 +4,10 @@ from researchpy.utility import *
 from researchpy.models.postestimation.predict import predict
 from researchpy.models.families import get_family
 from researchpy.containers import (
-    SolverOptions, FitStatistics, ModelEffects, CoefResults, ModelDesignSpec, Term,
+    ModelDesignSpec, SolverOptions,
+    FitStatistics, ModelDiagnostics,
+    ModelEffects, CoefResults, Term,
 )
-
 from researchpy.statistics import (
     _estimate_confidence_interval, _compute_pvalue
 )
@@ -33,12 +34,14 @@ class BaseModel(DesignMatrix):
                  include_intercept: bool = True, ensure_full_rank: bool = True,
                  **kwargs, ):
 
+
+        self.__name__ = "Researchpy.BaseModel"
+
         # -- Checking parameters and attributes --
         if not hasattr(self, "SolverOptions"):
             raise NotImplementedError(
                     f"{type(self).__name__} must have a self.SolverOptions attribute."
             )
-
 
         if not hasattr(self, "_table_decimals"):
             self._table_decimals = {
@@ -49,10 +52,6 @@ class BaseModel(DesignMatrix):
         if table_decimals is not None:
             self._table_decimals = self._table_decimals | table_decimals
 
-
-
-
-        self.__name__ = "Researchpy.BaseModel"
 
         # -- Creating the matrix --
         dm = DesignMatrix.from_formula(
@@ -67,15 +66,7 @@ class BaseModel(DesignMatrix):
         self.model_terms = dm.model_terms
         self.n, self.k = self.IV.shape
 
-
-
-
         # -- Initializing dataclass attributes for BaseModel --
-        #self.ModelDesignSpec = ModelDesignSpec()
-        #self.ModelEffects = ModelEffects()
-        #self.CoefResults = CoefResults()
-
-        # -- Storing the model design information and fit parameters in the ModelDesignSpec dataclass --
         self.ModelDesignSpec = ModelDesignSpec(
             formula = dm.formula,
             model_terms = self.model_terms,
@@ -87,17 +78,20 @@ class BaseModel(DesignMatrix):
             report_betas_as = kwargs.get("report_betas_as", "coef")
         )
 
-        # -- Storing initial fit statistics in the FitStatistics dataclass --
         self.FitStatistics = FitStatistics(
             n = self.n,
             k = self.k,
             test_stat_name = "F"
         )
 
-        # -- Storing available information in the CoefResults dataclass --
         self.CoefResults = CoefResults()
         self.CoefResults.term = list(self.model_terms['rhs'].column_map.keys())
         self.CoefResults.report_betas_as = kwargs.get("report_betas_as", "coef")
+
+        # -- ModelDiagnostics dataclass is populated during fit() and post-estimation checks.
+        # Initialized here to ensure it exists for summary() and other methods that may
+        # reference it before fitting.
+        self.Diagnostics = ModelDiagnostics()
 
         # -- Resolving the coefficient test-statistic --
         if kwargs.get("test_stat_name", None) is not None:
@@ -124,32 +118,6 @@ class BaseModel(DesignMatrix):
     def fit(self):
         raise NotImplementedError(
                 f"{type(self).__name__} must override fit()."
-        )
-
-
-    def _compute_statistics(self, confidence=0.95, distribution_name="normal", distribution_object=None, dof=None):
-        """
-        Compute the standard errors, test statistics, p-values, and confidence intervals for the model coefficients.
-
-        Uses the Family instance from ModelDesignSpec to compute working
-        weights generically across distribution families.
-
-        Notes
-        -----
-        Covariance matrix: Cov(β) = φ · (X'WX)^{-1}
-        where W = diag(working_weights) and φ is the dispersion parameter
-        (φ = 1 for binomial and Poisson; estimated for Gaussian/Gamma).
-
-        For Gaussian family: φ = RSS / (n − k), the mean squared error.
-
-        Wald statistic: z = β / SE(β)  [or t for models with estimated dispersion]
-
-        References
-        ----------
-        McCullagh & Nelder (1989), §2.4 — Estimation of the dispersion parameter.
-        """
-        raise NotImplementedError(
-            f"{type(self).__name__} must override _compute_statistics()."
         )
 
 
@@ -187,8 +155,8 @@ class BaseModel(DesignMatrix):
         self.CoefResults.conf_int_upper = np.array(conf_int_upper)
 
 
-    def predict(self, estimate=None, trans=None):
-        return predict(self, estimate=estimate, trans=trans)
+    def predict(self, estimate=None, trans=None, decimals=4):
+        return predict(self, estimate=estimate, trans=trans, decimals=decimals)
 
 
     #---------------------------------------------------------------------------#
@@ -466,6 +434,11 @@ class BaseModel(DesignMatrix):
             self._summary_coef_table(coefficients_df, total_width, table_decimals=self._table_decimals)
         )
 
+        # === DIAGNOSTICS FOOTER (only rendered when diagnostics exist) ===
+        diagnostics_block = self._summary_diagnostics(total_width)
+        if diagnostics_block:
+            output_lines.append(diagnostics_block)
+
 
         summary_str = "\n".join(output_lines)
 
@@ -474,6 +447,76 @@ class BaseModel(DesignMatrix):
         else:
             print(summary_str)
             return None
+
+
+    def _summary_diagnostics(self, width=78):
+        """
+        Build the diagnostics footer block for the summary output.
+
+        Renders optimization and model-fit diagnostics (convergence,
+        ill-conditioning, separation) stored in ``self.Diagnostics``. Returns
+        an empty string when there are no diagnostic messages, so clean fits
+        produce output byte-identical to the pre-diagnostics behavior.
+
+        Messages are ordered, ``Warning`` (inference unreliable) before
+        ``Note`` (informational); each using a fixed 9-character label field so
+        wrapped continuation lines align beneath the message text.
+
+        Parameters
+        ----------
+        width : int, optional
+            Total character width of the output. Default is 78.
+
+        Returns
+        -------
+        str
+            Formatted diagnostics block, or ``""`` when there is nothing to
+            report.
+        """
+        import textwrap
+
+        diagnostics = getattr(self, "Diagnostics", None)
+        if diagnostics is None:
+            return ""
+
+        messages = getattr(diagnostics, "messages", None) or []
+        if not messages:
+            return ""
+
+        # Each message is a (severity, text) pair. Accept bare strings too,
+        # defaulting them to "Warning" severity.
+        normalized = []
+        for msg in messages:
+            if isinstance(msg, (tuple, list)) and len(msg) == 2:
+                severity, text = msg
+            else:
+                severity, text = "Warning", str(msg)
+            normalized.append((str(severity).capitalize(), text))
+
+        # Warnings first, then Notes; stable within each group for determinism.
+        severity_order = {"Warning": 0, "Note": 1}
+        normalized.sort(key=lambda item: severity_order.get(item[0], 2))
+
+        # Fixed 9-char label field (e.g. "Warning: " / "Note:    ") with a
+        # 4-space indent; continuation lines hang beneath the message text.
+        indent = "    "
+        label_width = 9
+        subsequent_indent = " " * (len(indent) + label_width)
+
+        lines = ["Diagnostics:"]
+        for severity, text in normalized:
+            label = f"{severity + ':':<{label_width}}"
+            wrapped = textwrap.fill(
+                text,
+                width=width,
+                initial_indent=f"{indent}{label}",
+                subsequent_indent=subsequent_indent,
+            )
+            lines.append(wrapped)
+
+        lines.append("-" * width)
+
+        return "\n".join(lines)
 
 
     def _get_model_display_name(self):

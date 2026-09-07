@@ -32,7 +32,9 @@ def summary_cont(group1, conf = 0.95, decimals = 4):
         #### PUTTING THE INFORMATION INTO A DATAFRAME #####
         table = pandas.DataFrame(numpy.zeros(shape= (1,7)),
                          columns = ['Variable', 'N', 'Mean', 'SD', 'SE', f'{conf_level} Conf.', 'Interval'])
-
+        # 'Variable' holds a string name; np.zeros scaffold makes it float64, so
+        # cast to object before assigning (modern pandas raises otherwise).
+        table['Variable'] = table['Variable'].astype(object)
 
         # Setting up the first column (Variable names)
         table.iloc[0,0] = group1.name
@@ -59,18 +61,20 @@ def summary_cont(group1, conf = 0.95, decimals = 4):
         table = pandas.DataFrame(numpy.zeros(shape= (1,7)),
                          columns = ['Variable', 'N', 'Mean', 'SD', 'SE',
                                     f'{conf_level} Conf.', 'Interval'])
+        # 'Variable' holds a string name; np.zeros scaffold makes it float64, so
+        # cast to object before assigning (modern pandas raises otherwise).
+        table['Variable'] = table['Variable'].astype(object)
 
         count = 0
-
         for ix, df_col in group1.items():
-
             count = count + 1
-
             if count == 0:
-
                 table = pandas.DataFrame(numpy.zeros(shape= (1,7)),
                          columns = ['Variable', 'N', 'Mean', 'SD', 'SE',
                                     f'{conf_level} Conf.', 'Interval'])
+                # 'Variable' holds a string name; np.zeros scaffold makes it float64, so
+                # cast to object before assigning (modern pandas raises otherwise).
+                table_a['Variable'] = table_a['Variable'].astype(object)
 
                 # Setting up the first column (Variable names)
                 table.iloc[0,0] = ix
@@ -93,10 +97,12 @@ def summary_cont(group1, conf = 0.95, decimals = 4):
                                           loc= numpy.mean(df_col),
                                           scale= scipy.stats.sem(df_col, nan_policy= 'omit'))
             else:
-
                 table_a = pandas.DataFrame(numpy.zeros(shape= (1,7)),
                          columns = ['Variable', 'N', 'Mean', 'SD', 'SE',
                                     f'{conf_level} Conf.', 'Interval'])
+                # 'Variable' holds a string name; np.zeros scaffold makes it float64, so
+                # cast to object before assigning (modern pandas raises otherwise).
+                table_a['Variable'] = table_a['Variable'].astype(object)
 
                 # Setting up the first column (Variable names)
                 table_a.iloc[0,0] = ix
@@ -119,18 +125,14 @@ def summary_cont(group1, conf = 0.95, decimals = 4):
                                           loc= numpy.mean(df_col),
                                           scale= scipy.stats.sem(df_col, nan_policy= 'omit'))
 
-
-
             table = pandas.concat([table, table_a], ignore_index= "true")
 
         table.drop(0, inplace= True)
         table.reset_index(inplace= True, drop= True)
 
 
-
     elif type(group1) == pandas.core.groupby.SeriesGroupBy:
         ## Validated with R
-
         cnt = group1.count()
         cnt.rename("N", inplace= True)
         mean = group1.mean()
@@ -157,7 +159,6 @@ def summary_cont(group1, conf = 0.95, decimals = 4):
 
 
     elif type(group1) == pandas.core.groupby.DataFrameGroupBy :
-
         # There has to be a better way to get the lower and upper CI limits
         # in the groupby table. Until then, this works :/
         def l_ci(x):
@@ -184,10 +185,8 @@ def summary_cont(group1, conf = 0.95, decimals = 4):
         table.rename(columns = {'count': 'N', 'mean': 'Mean', 'std': 'SD',
                                 'sem': 'SE', "l_ci" : f'{conf_level} Conf.', "u_ci" : "Interval"}, inplace= True)
 
-
     else:
         return "This method only works with a Pandas Series, Dataframe, or Groupby object"
-
 
     print("\n")
     return table.round(decimals)
