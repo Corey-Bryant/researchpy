@@ -94,11 +94,27 @@ class CoreDataclass:
         return "\n\n".join(parts) + "\n)"
 
 
+    def __len__(self) -> int:
+        """Return the number of declared fields.
+
+        Keeps ``len(obj)`` consistent with iteration, which yields one
+        value per dataclass field in declaration order.
+        """
+        return len(fields(self))
+
     def __iter__(self):
         """Yield fields in order for tuple-style unpacking."""
         for f in fields(self):
             yield getattr(self, f.name)
 
+    def __getitem__(self, key):
+        """Index fields in declaration order, consistent with ``__iter__``.
+
+        Supports integers, negatives, and slices, mirroring list
+        indexing over ``list(obj)`` so ``list(x)[i] == x[i]`` always.
+        """
+        values = [getattr(self, f.name) for f in fields(self)]
+        return values[key]
 
     def __repr__(self):
         return self.info()

@@ -75,7 +75,7 @@ class ols(model):
     def __init__(self, formula_like, data={}):
         # Issue deprecation warning
         warnings.warn(
-            "The `ols` class is deprecated and will be removed in a future version (v0.4.0) -> switch to `Regress` (alias `LM`)."
+            "The `ols` class is deprecated and will be removed in a future version (v0.4.0) -> switch to `Regress` (alias `LM`). "
             "Please use `Regress` (alias `LM`) from researchpy.models.linear instead: "
             "from researchpy.models import Regress. ",
             DeprecationWarning,

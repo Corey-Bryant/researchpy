@@ -16,9 +16,6 @@ submodules for different types of models:
 
 
 from researchpy.models.base import BaseModel
-#from researchpy.models.families import (
-#    Family, BinomialFamily, PoissonFamily, GaussianFamily, get_family,
-#)
 from researchpy.models.linear import (
     Regress, LinearRegression, LM, Anova, ANOVA,
 )
