@@ -17,8 +17,9 @@ from dataclasses import dataclass
 import numpy as np
 
 
+
 # Default condition-number threshold above which a matrix is treated as
-# effectively rank-deficient for covariance estimation.  Kept as a module
+# effectively rank-deficient for covariance estimation. Kept as a module
 # constant for now; may be promoted to a SolverOptions field if per-model
 # control is needed.
 CONDITION_NUMBER_THRESHOLD: float = 1e10

@@ -414,7 +414,6 @@ class GeneralizedLinearModel(BaseModel):
         test_pval_model = round(float(self.FitStatistics.test_pval), self._table_decimals.get('test_stat_p', 4))
         log_likelihood = round(float(self.FitStatistics.log_likelihood), self._table_decimals.get('log_likelihood', 4))
         pseudo_r2 = round(float(self.FitStatistics.r_squared_pseudo), self._table_decimals.get('R-squared', 4))
-        n_iter = self.FitStatistics.additional_stats.get("n_iterations") if self.FitStatistics.additional_stats else None
 
         fit_statistics = {
             "n": [f"N = {self.n}"],
@@ -422,7 +421,6 @@ class GeneralizedLinearModel(BaseModel):
             "test_pval_model": [f"Prob > Chi^2 = {test_pval_model}"],
             "log_likelihood": [f"Log likelihood = {log_likelihood}"],
             "pseudo_r2": [f"Pseudo R^2 = {pseudo_r2}"],
-            "n_iterations": [f"N iterations = {n_iter}"],
         }
 
         return fit_statistics
