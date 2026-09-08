@@ -1,3 +1,4 @@
+import warnings
 import numpy
 import scipy.stats
 
@@ -117,25 +118,39 @@ def skew(d):
     return float(scipy.stats.skew(d, nan_policy='omit'))
 
 
-def confidence_interval(d, alpha=0.95, n=None, loc=None, scale=None, decimals=4):
+def confidence_interval(d, alpha=0.95, n=None, loc=None, scale=None, decimals=4, confidence=None):
     """
+
+    .. deprecated:: v0.3.7.2
+        The interface of ``confidence_interval`` is changing and will be updated in the future version.
+        As of v0.4.0 a ``TestResults`` object will be returned instead of a list of bounds. The
+        bounds are accessible as ``result.lower`` and ``result.upper``.
+        The former ``alpha`` parameter will be renamed to ``confidence``. The former ``n``, ``loc``, and ``scale``
+        parameters are removed; passing them will raise a ``TypeError`` as of v0.4.0.
+        See ``_confidence_interval`` for the new interface. See `TestResults` for the new return type.
 
     Parameters
     ----------
     d : array_like
         The data being passed to the function.
+        In the future, this will be replaced with ``point_est`` which is either an ``np.ndarray`` or a scalar.
 
     alpha : decimal (float), optional
         Confidence interval range to be calculated. The default is 0.95.
+
+    confidence : decimal (float), optional
+        Future replacement for ``alpha``. Pass only one of ``alpha`` or ``confidence``.
 
     n : numeric, optional
         The number of observations - 1. The default is None and is calculated as numpy.count_nonzero(~numpy.isnan(d)) - 1.
 
     loc : float, optional
         The central measure of tendency to be used. The default is None, which will be calculated as numpy.nanmean(d) (the mean).
+        In the future, this will be replaced with ``point_est`` which is either an ``np.ndarray`` or a scalar.
 
     scale : float, optional
         The variability measure to be used. The default is None, which will be calculated as scipy.stats.sem(d, nan_policy= 'omit') (the standard error)
+        In the future, this will be replaced with ``scale_error_est`` which is either a scalar or None.
 
     decimals : integer, optional
         How many decimals places to round to. The default is 4.
@@ -143,9 +158,27 @@ def confidence_interval(d, alpha=0.95, n=None, loc=None, scale=None, decimals=4)
     Returns
     -------
     ci_intervals : List
-        Returns the confidence interval in a last as the [lower_bound, upper_bound].
+        Returns the confidence interval in a list as the [lower_bound, upper_bound].
+        In the future, this will be replaced with a ``TestResults`` object with ``lower`` and ``upper`` attributes.
+
+    Examples
+    --------
+    >>> confidence_interval([1, 2, 3, 4, 5], alpha=0.95)
+    [1.036, 4.964]
 
     """
+    warnings.warn(
+            "`confidence_interval` interface and return is changing and will be updated in the future version (0.4.0). "
+            "See `_confidence_interval` for the new interface. See `TestResults` for the new return type. " 
+            "The return type will be a `TestResults` object with `lower` and `upper` attributes, and the `alpha` parameter is renamed to `confidence`. " 
+            "The `n`, `loc`, and `scale` parameters are removed.",
+            FutureWarning,
+            stacklevel=2,
+    )
+    if confidence is not None:
+        if alpha != 0.95:
+            raise TypeError("Pass only one of 'alpha' or 'confidence'.")
+        alpha = confidence
 
     if n == None:
         n = count(d) - 1

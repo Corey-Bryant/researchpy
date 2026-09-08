@@ -30,12 +30,13 @@ from researchpy.core import as_array, validate_array
 
 from researchpy.models import (
     BaseModel,
-    Regress, LinearRegression, LM, Anova, ANOVA,
-    GLM, GeneralizedLinearModel, Logistic, LogisticRegression,
+    Regress, LinearRegression, LM,
+    Anova, ANOVA,
+    Logistic, LogisticRegression,
 )
 
 # -- Statistical summary subpackage
-from researchpy.statistics import *
+#from researchpy.statistics import *
 
 
 # --
@@ -44,7 +45,7 @@ __all__ = [
     "__version__",
 
     # Utility
-    "rounder", "return_numeric", "_as_numeric",
+    "rounder", "return_numeric", "as_numeric",
     "patsy_column_cleaner", "patsy_term_cleaner",
     "variable_information", "base_table",
 
@@ -86,10 +87,13 @@ __all__ = [
 
     # Models
     "BaseModel",
-    "Regress", "LinearRegression", "LM", "Anova", "ANOVA",
-    "GLM", "GeneralizedLinearModel",
+    "Regress", "LinearRegression", "LM",
+    "Anova", "ANOVA",
     "Logistic", "LogisticRegression",
 
     # Statistics subpackage
-    "_confidence_interval"
+    #"_get_distribution",
+    #"_confidence_interval"
+    #"_estimate_confidence_interval",
+    #"_compute_pvalue",
 ]

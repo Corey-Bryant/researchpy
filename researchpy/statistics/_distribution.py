@@ -14,8 +14,7 @@ import numpy as np
 from researchpy.utility import as_numeric
 from researchpy.containers import TestResults
 
-if TYPE_CHECKING:
-    from scipy.stats import distributions
+from scipy.stats import distributions, sem
 
 
 
@@ -113,9 +112,9 @@ def _get_distribution(distribution: Optional[Union[str, distributions.rv_continu
 
 
 
-def _confidence_interval(point_est: Union[float, int, np.floating, np.integer],
-                         scale_error_est: Union[float, int, np.floating, np.integer],
+def _confidence_interval(x: Union[np.ndarray, float, int, np.floating, np.integer],
                          distribution: Union[str, distributions.rv_continuous, distributions.rv_discrete],
+                         scale_error_est: Union[float, int, np.floating, np.integer, None] = None,
                          *,
                          confidence: Union[float, int, np.floating, np.integer] = 0.95,
                          dof: Union[float, int, np.floating, np.integer, None] = None,
@@ -127,8 +126,8 @@ def _confidence_interval(point_est: Union[float, int, np.floating, np.integer],
 s
     Parameters
     ----------
-    :param point_est: The point estimate for which the confidence interval is to be computed.
-    :type point_est: Union[float, int, np.floating, np.integer]
+    :param x: The point estimate for which the confidence interval is to be computed.
+    :type x: Union[np.ndarray, float, int, np.floating, np.integer]
     :param scale_error_est: The standard error of the point estimate.
     :type scale_error_est: Union[float, int, np.floating, np.integer]
     :param distribution: The name of the distribution to use for computing the confidence interval.
@@ -149,71 +148,37 @@ s
     Examples
     --------
     >>> from researchpy import _confidence_interval
-    >>> point_est = 5.0
-    >>> scale_error_est = 1.0
-    >>> distribution_name = "norm"
-    >>> confidence = 0.95
-    >>> ci_result = _confidence_interval(point_est, scale_error_est, distribution_name, confidence=confidence)
-    >>> print(ci_result.statistics)
-    {'lower': 3.04, 'upper': 6.96}
+    >>> import researchpy.datasets as datasets
+    >>> auto = datasets.auto()
+    >>> ci_results = _confidence_interval(auto["price"], distribution="t")
+    >>> print(ci_results)
+    TestResults(test_name='95.0% Conf. Interval', statistics={'lower': 5481.913981555081, 'upper': 6848.599531958433}, details={'95.0% Conf. Interval': ['Estimated using the t distribution']})
+
+    >>> print(ci_results.statistics)
+    {'lower': 5481.913981555081, 'upper': 6848.599531958433}
+
+    >>> print([ci_results.lower, ci_results.upper])
+    [5481.913981555081, 6848.599531958433]
 
     """
-    # --------------------------- #
-    # -- Validating Parameters -- #
-    # ----------------------------#
-    if confidence <= 0 or confidence >= 1 :
-        raise ValueError(
-                f"confidence must be between 0 and 1 (exclusive), got {confidence}. "
-                f"For a 95% CI, use confidence=0.95.",
-        )
 
-    if isinstance(distribution, str):
-        distribution = _get_distribution(distribution)
-    elif isinstance(distribution, (distributions.rv_continuous, distributions.rv_discrete)):
-        pass
-    else:
-        raise ValueError(
-                f"distribution must be a string or a scipy.stats distribution object, got {type(distribution)}. "
-                f"Use get_distribution() to retrieve a distribution by name.",
-        )
-
-    #--------------------------------------#
-    # -- Estimating Confidence Interval -- #
-    #--------------------------------------#
-    if distribution.name.lower() == "t":
-        if dof is None:
+    if isinstance(x, (float, int, np.floating, np.integer)):
+        if scale_error_est is None:
             raise ValueError(
-                    f"Degrees of freedom (dof) must be provided for t-distribution. "
+                    f"scale_error_est must be provided when x is a scalar. "
+                    f"Got scale_error_est={scale_error_est}.",
             )
-        lower, upper = distribution.interval(confidence, df=dof, loc=point_est, scale=scale_error_est)
+        ci_result = _estimate_confidence_interval(point_est=x, scale_error_est=scale_error_est, distribution=distribution,
+                                                  confidence=confidence, dof=dof, decimals=decimals, **kwargs)
     else:
-        lower, upper = distribution.interval(confidence, loc=point_est, scale=scale_error_est)
+        point_est = np.nanmean(x)                                                       # central
+        scale_error_est = sem(x, nan_policy='omit') if scale_error_est is None else scale_error_est  # variability
+        n = np.count_nonzero(~np.isnan(x))                                              # number of observations
+        dof = n-1 if dof is None else dof                                               # degrees of freedom
+        ci_result = _estimate_confidence_interval(point_est=point_est, scale_error_est=scale_error_est, distribution=distribution,
+                                                  confidence=confidence, dof=dof, decimals=decimals, **kwargs)
 
-
-
-    #--------------------------------#
-    # -- Formatting and Returning -- #
-    #--------------------------------#
-    try:
-        lower = as_numeric(lower)
-        upper = as_numeric(upper)
-
-        if decimals is not None and decimals >= 0:
-            lower = round(lower, decimals)
-            upper = round(upper, decimals)
-
-    except Exception as e:
-        print(
-                f"Error: {e} --> Failed to convert lower and upper bounds to numeric; lower={lower}, upper={upper}."
-                f"Returning as original values instead, i.e. returning as [{lower}, {upper}].",
-        )
-
-    test_name = f"{confidence * 100:.1f}% Conf. Interval"
-    return TestResults(
-            test_name=test_name,
-            statistics={"lower": lower, "upper": upper},
-            details={test_name: [f"Estimated using the {distribution.name} distribution"]},
-    )
+    return ci_result
 
 
 

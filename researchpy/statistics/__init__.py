@@ -21,7 +21,7 @@ from ._distribution import (
     _get_distribution,
     _estimate_confidence_interval,
     _compute_pvalue,
-    _confidence_interval as confidence_interval,
+    _confidence_interval,
 )
 #from ._hypothesis_test import compute_pvalue
 
@@ -31,5 +31,4 @@ __all__ = [
     "_estimate_confidence_interval",
     "_compute_pvalue",
     #"_confidence_interval",
-    "confidence_interval",
 ]

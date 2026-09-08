@@ -694,6 +694,40 @@ class TestResults(CoreDataclass):
 
         return result
 
+    def __getattr__(self, name: str):
+        """Delegate unknown attributes to ``statistics`` keys.
+
+        Enables named access to test results without affecting dataclass
+        field iteration or unpacking semantics, e.g., ``result.lower``
+        and ``result.upper`` for confidence intervals, or
+        ``result.test_stat`` for a likelihood ratio test.
+
+        Strictly read-only delegation: a matching ``statistics`` key is
+        returned as-is, anything else raises ``AttributeError``. No
+        fuzzy matching, no setting.
+
+        Notes
+        -----
+        Accesses ``statistics`` via ``super().__getattribute__`` to avoid
+        recursion if this method fires during ``__init__``, copying, or
+        unpickling before ``statistics`` is bound.
+        """
+        if name.startswith("_"):
+            # Never delegate private/dunder names; fall through to the
+            # standard AttributeError below.
+            stats = None
+        else:
+            try:
+                stats = super().__getattribute__("statistics")
+            except AttributeError:
+                stats = None
+
+        if isinstance(stats, dict) and name in stats:
+            return stats[name]
+
+        raise AttributeError(
+                f"{type(self).__name__!r} object has no attribute {name!r}",
+        )
 
     def to_dataframe(self, details_as_col: bool = False) -> pd.DataFrame:
         """Convert the result to a pandas DataFrame (single row).
