@@ -23,7 +23,7 @@ dependencies = [
     'pandas>=3.0.1',
     'statsmodels>=0.14.0',
     'patsy>=1.0.2',
-    "requests==2.34.2",
+    "requests>=2.34.2",
     'formulaic>=1.2.2',
 ]
 
@@ -31,7 +31,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://researchpy.readthedocs.io/"
 Documentation = "https://researchpy.readthedocs.io/"
-Repository = "https://github.com/researchpy/researchpy.git"
+Repository = "https://github.com/Corey-Bryant/researchpy.git"
 
 [tool.setuptools]
 [tool.setuptools.packages.find]

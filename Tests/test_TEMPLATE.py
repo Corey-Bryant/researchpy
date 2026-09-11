@@ -91,6 +91,7 @@ class TestDeprecation:
     Skip or delete this class if deprecation does not apply.
     """
 
+    @pytest.mark.skip(reason="Template placeholder - copy this file and implement before enabling")
     def test_emits_deprecation_warning(self, systolic_df):
         """Instantiating should emit a DeprecationWarning."""
         with warnings.catch_warnings(record=True) as w:

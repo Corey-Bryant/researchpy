@@ -106,7 +106,7 @@ class TestAnovaDeprecation:
 
         deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
         messages = [str(x.message) for x in deprecation_warnings]
-        assert any("researchpy.models.multivariable" in msg for msg in messages), (
+        assert any("researchpy.models.linear" in msg for msg in messages), (
             f"Expected migration path in message, got: {messages}"
         )
 

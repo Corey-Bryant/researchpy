@@ -172,32 +172,19 @@ class anova(ols):
 
                     
                     # Updating items
-                try:
-                    factor_effects["Source"].append(term)
-                    factor_effects["Sum of Squares"].append(float(sum_of_square_factor))
-                    factor_effects["Degrees of Freedom"].append(float(degrees_of_freedom_factor))
-                    factor_effects["Mean Squares"].append(float(msr_f))
-                    factor_effects["F value"].append(float(f_value_model))
-                    factor_effects["p-value"].append(float(f_p_value_model))
+                factor_effects["Source"].append(term)
+                factor_effects["Sum of Squares"].append(float(numpy.asarray(sum_of_square_factor).item()))
+                factor_effects["Degrees of Freedom"].append(float(numpy.asarray(degrees_of_freedom_factor).item()))
+                factor_effects["Mean Squares"].append(float(numpy.asarray(msr_f).item()))
+                factor_effects["F value"].append(float(numpy.asarray(f_value_model).item()))
+                factor_effects["p-value"].append(float(numpy.asarray(f_p_value_model).item()))
 
-                    factor_effects["Eta squared"].append(float(eta_squared_partial))
-                    factor_effects["Epsilon squared"].append(float(epsilon_squared_partial))
-                    factor_effects["Omega squared"].append(float(omega_squared_partial))
+                factor_effects["Eta squared"].append(float(numpy.asarray(eta_squared_partial).item()))
+                factor_effects["Epsilon squared"].append(float(numpy.asarray(epsilon_squared_partial).item()))
+                factor_effects["Omega squared"].append(float(numpy.asarray(omega_squared_partial).item()))
 
-                except:
-                    factor_effects["Source"].append(term)
-                    factor_effects["Sum of Squares"].append(float((sum_of_square_factor).item()))
-                    factor_effects["Degrees of Freedom"].append(float((degrees_of_freedom_factor).item()))
-                    factor_effects["Mean Squares"].append(float((msr_f).item()))
-                    factor_effects["F value"].append(float((f_value_model).item()))
-                    factor_effects["p-value"].append(float((f_p_value_model).item()))
-
-                    factor_effects["Eta squared"].append(float((eta_squared_partial).item()))
-                    factor_effects["Epsilon squared"].append(float((epsilon_squared_partial).item()))
-                    factor_effects["Omega squared"].append(float((omega_squared_partial).item()))
-
-                    # Setting new Sum of Square Residual
-                    previous_sum_of_squares_error = sum_of_square_residual
+                # Setting new Sum of Square Residual
+                previous_sum_of_squares_error = sum_of_square_residual
 
                 self.factor_effects = factor_effects
 

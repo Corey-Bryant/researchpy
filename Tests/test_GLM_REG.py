@@ -15,6 +15,15 @@ Note on reference levels:
     and reporting β_white = +2.55.  The magnitudes, SEs, |z|, p-values,
     and CI widths are identical; only the sign and intercept differ by
     the reference-level offset.
+
+Scope / status:
+    GLM (GeneralizedLinearModel) is an *advanced / experimental* class. It is
+    intentionally NOT exported at the top level (`researchpy.GLM`); import it
+    from `researchpy.models.generalized` instead. As of this release it has
+    been validated only for the Gaussian/identity case (this file) and the
+    logit case (via the `Logistic` class). Other families/links (e.g., Poisson)
+    are not yet vetted. These tests are published so users can see the
+    validation that has been performed.
 """
 import warnings
 
@@ -44,7 +53,9 @@ def model_fixture(glm_reg_df):
     """
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
-        from researchpy import GLM
+        # GLM is an advanced/experimental class and is intentionally not exported
+        # at the top level (researchpy.GLM). Import it from its subpackage tier.
+        from researchpy.models.generalized import GLM
         model = GLM(
             "income ~ educ + jobexp + C(black)",
             data=glm_reg_df,
