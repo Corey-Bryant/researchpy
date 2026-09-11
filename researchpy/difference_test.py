@@ -2,6 +2,7 @@ import numpy
 import scipy.stats
 import patsy
 import pandas
+import re
 
 from .summary import summarize
 from .model import model
@@ -11,7 +12,6 @@ from .utility import *
 
 
 class difference_test(object):
-
     """
 
     A method that conducts various difference tests and effect size measures which
@@ -47,10 +47,6 @@ class difference_test(object):
         model.conduct(return_type = "Dataframe", effect_size = None)
 
     """
-
-
-
-
     def __init__(self, formula_like, data = {}, conf_level = 0.95,
                  equal_variances = True, independent_samples = True,
                  wilcox_parameters = {"zero_method" : "pratt", "correction" : False, "mode" : "auto"},
@@ -61,8 +57,6 @@ class difference_test(object):
                          "Only 'pratt' and 'wilcox' methods are supported."
                          " ",
                          sep = "\n"*2)
-
-
 
         # Determining which test to conduct
         if equal_variances == True and independent_samples == True:
@@ -76,11 +70,7 @@ class difference_test(object):
             parameters = {"zero_method" : "pratt", "correction" : False, "mode" : "auto"}
             parameters.update(wilcox_parameters)
 
-
-
         self.DV, self.IV = patsy.dmatrices(formula_like + "- 1", data, 1)
-
-
 
         # Checking number of groups in IV, if > 2 stop function
         if len(self.IV.design_info.column_names) > 2:
@@ -93,8 +83,6 @@ class difference_test(object):
 
         # Cleaning up category names from Patsy output
         categories = [re.findall(r"\[(.*)\]", name)[0] for name in self.IV.design_info.column_names]
-
-
 
         if name == "Wilcoxon signed-rank test":
             self.parameters = {"Test name" : name,
@@ -114,12 +102,8 @@ class difference_test(object):
                                "Welch DoF" : welch_dof}
 
 
-
-
     def conduct(self, return_type = "Dataframe", effect_size = None, decimals = 4):
         """
-
-
         Parameters
         ----------
         return_type : string, optional
@@ -141,14 +125,12 @@ class difference_test(object):
             Containts the statistical testing information as well as any effect size measures.
 
         """
-
-        # Parameter check
+        # -- Parameter check
         if return_type.upper() not in ["DATAFRAME", "DICTIONARY"]:
             return print(" ",
                          "Not a supported return type. Only 'Dataframe' and 'Dictionary' are supported at this time.",
                          " ",
                          sep = "\n"*2)
-
 
         if effect_size is not None:
             if type(effect_size) == str and effect_size != "all":
@@ -164,31 +146,25 @@ class difference_test(object):
                                  sep = "\n"*2)
 
 
-
-        # Splitting into seperate arrays and getting descriptive statistics
+        # -- Splitting into seperate arrays and getting descriptive statistics
         group1, group2 = numpy.hsplit(self.IV, 2)
-
         group1 = self.DV[group1 == 1]
         group2 = self.DV[group2 == 1]
-
-
 
         # Getting the summary table ready - part 1
         group1_info = summarize(group1, stats = ["N", "Mean", "SD", "SE", "Variance", "CI"], name = self.parameters["Categories"][0], ci_level = self.parameters["Conf. Level"], decimals = 64, return_type = "Dictionary")
         group2_info = summarize(group2, stats = ["N", "Mean", "SD", "SE", "Variance", "CI"], name = self.parameters["Categories"][1], ci_level = self.parameters["Conf. Level"], decimals = 64, return_type = "Dictionary")
 
-
         combined = summarize(self.DV,
-                             stats = ["N", "Mean", "SD", "SE", "Variance", "CI"], name = "combined", ci_level = self.parameters["Conf. Level"], decimals = 64, return_type = "Dictionary")
-
+                             stats = ["N", "Mean", "SD", "SE", "Variance", "CI"],
+                             name = "combined",
+                             ci_level = self.parameters["Conf. Level"],
+                             decimals = 64,
+                             return_type = "Dictionary")
 
         diff = {}
         diff["Name"] = "diff"
         diff["Mean"]  = group1_info["Mean"] - group2_info["Mean"]
-
-
-
-
 
         # Performing the statistical test
         if self.parameters["Test name"] == "Independent samples t-test":
@@ -196,7 +172,6 @@ class difference_test(object):
             stat_name = "t"
 
             dof = group1_info["N"] + group2_info["N"] - 2
-
 
             var_pooled = ( (group1_info["N"] - 1)*group1_info["Variance"] + (group2_info["N"] - 1)*group2_info["Variance"] ) / (group1_info["N"] + group2_info["N"] - 2)
 
@@ -208,16 +183,11 @@ class difference_test(object):
                                                                   scale = se_pooled)
             diff["SE"] = float(se_pooled)
 
-
-
-
         if self.parameters["Test name"] == "Paired samples t-test":
             stat, pval = scipy.stats.ttest_rel(group1, group2, nan_policy = 'omit')
             stat_name = "t"
 
             dof = group1_info["N"] - 1
-
-
 
             difference = group1 - group2
 
@@ -231,32 +201,21 @@ class difference_test(object):
             diff["SE"] = se
             diff["SD"] = float(difference.std(ddof = 1))
 
-
-
-
         if self.parameters["Test name"] == "Welch's t-test":
-
             stat, pval = scipy.stats.ttest_ind(group1, group2, equal_var = False, nan_policy = 'omit')
             stat_name = "t"
 
             se_unpooled = numpy.sqrt( group1_info["Variance"] / group1_info["N"] +  group2_info["Variance"] / group2_info["N"]  )
 
-
-
             if self.parameters["Welch DoF"] == "satterthwaite":
-
                 ## Satterthwaite (1946) Degrees of Freedom ##
                 dof = ((group1_info["Variance"]/group1_info["N"]) + (group2_info["Variance"]/group2_info["N"]))**2 / ((group1_info["Variance"]/group1_info["N"])**2 / (group1_info["N"]-1) + (group2_info["Variance"]/group2_info["N"])**2 / (group2_info["N"]-1))
 
-
             elif self.parameters["Welch DoF"] == "welch":
-
                 ## Welch (1947) Degrees of Freedom ##
                 dof = -2 + (((group1_info["Variance"]/group1_info["N"]) + (group2_info["Variance"]/group2_info["N"]))**2 / ((group1_info["Variance"]/group1_info["N"])**2 / (group1_info["N"]+1) + (group2_info["Variance"]/group2_info["N"])**2 / (group2_info["N"]+1)))
 
                 pval = 2 * min((1 - scipy.stats.t.cdf(stat, dof)), scipy.stats.t.cdf(stat, dof))
-
-
 
             ci_lower_diff, ci_upper_diff = scipy.stats.t.interval(self.parameters["Conf. Level"],
                                                                   dof,
@@ -264,14 +223,11 @@ class difference_test(object):
                                                                   scale = se_unpooled)
             diff["SE"] = float(se_unpooled)
 
-
         if self.parameters["Test name"] == "Wilcoxon signed-rank test":
-
             difference = group1 - group2
             difference = numpy.reshape(difference, (difference.shape[0], ))
 
             if self.parameters["Wilcox parameters"]['zero_method'] == 'pratt':
-
                 difference_abs = numpy.abs(difference)
 
                 total_n = difference.shape[0]
@@ -280,7 +236,6 @@ class difference_test(object):
                 zero_n = difference[difference == 0].shape[0]
 
             elif self.parameters["Wilcox parameters"]['zero_method'] == 'wilcox':
-
                 difference = difference[difference != 0]
                 difference_abs = numpy.abs(difference)
 
@@ -292,19 +247,12 @@ class difference_test(object):
 
             elif self.parameters["Wilcox parameters"]['zero_method'] == 'zsplit':
                 # Includes zero-differences in the ranking process and split the zero tank between positive and negative ones
-
                 print("This method is not currently supported, please enter either 'wilcox' or 'pratt'.")
-
-
 
             # Ranking the absolute difference |d|
             ranked = scipy.stats.rankdata(difference_abs)
-
             sign = numpy.where(difference < 0, -1, 1)
-
             ranked_sign = (sign * ranked)
-
-
 
             # Descriptive Information #
             total_sum_ranks = ranked.sum()
@@ -312,12 +260,10 @@ class difference_test(object):
             negative_sum_ranks = ranked[difference < 0].sum()
             zero_sum_ranks = ranked[difference == 0].sum()
 
-
             ## Dropping the Rank of the Zeros
             sign2 = numpy.where(difference == 0, 0, sign)
             ranked2 = sign2 * ranked
             ranked2 = numpy.where(difference == 0, 0, ranked2)
-
 
             # Expected T
             T = (sign * ranked_sign).sum()
@@ -325,79 +271,58 @@ class difference_test(object):
             # Observered T
             T_obs = (sign2 * ranked2).sum()
 
-
             # Expected T+ and T-
             exp_positive = T_obs / 2
             exp_negative = T_obs / 2
             exp_zero = T - T_obs
 
             var_adj_T = (ranked2 * ranked2).sum()
-
-
             e_T_pos = total_n  * (total_n  + 1) / 4
             var_adj_T_pos = (1/4) * var_adj_T
 
             var_unadj_T_pos = ((total_n * (total_n + 1)) * (2 * total_n + 1)) /24
             var_zero_adj_T_pos = -1 * ((zero_n * (zero_n + 1)) * (2 * zero_n + 1)) /24
-
             var_ties_adj = var_adj_T_pos - var_unadj_T_pos - var_zero_adj_T_pos
 
-
             z = (positive_sum_ranks - exp_positive) / numpy.sqrt(var_adj_T_pos)
-
-
 
             t_val, p_val = scipy.stats.wilcoxon(difference,
                                                 zero_method = self.parameters["Wilcox parameters"]['zero_method'],
                                                 correction = self.parameters["Wilcox parameters"]["correction"],
                                                 mode = self.parameters["Wilcox parameters"]["mode"])
 
-
-            ## Effect size
-            ##  Pearson r = z / square_root(N)
+            # -- Effect sizes
+            # Pearson r = z / square_root(N)
             pr = z / numpy.sqrt(total_n)
-
             pbr = t_val / total_sum_ranks
 
-
-            ### Descriptive table
+            # -- Descriptive table
             descriptives = {"sign" : ["positive", "negative", "zero", "all"],
                             "obs" : [positive_n, negative_n, zero_n, total_n],
                             "sum ranks" : [positive_sum_ranks, negative_sum_ranks, zero_sum_ranks, total_sum_ranks],
                             "expected" : [exp_positive, exp_negative, exp_zero, T]}
 
-            ##### Variance table
+            # -- Variance table
             variance = {"unadjusted variance" : var_unadj_T_pos,
                         "adjustment for ties" : var_ties_adj,
                         "adjustment for zeros" : var_zero_adj_T_pos,
                         "adjusted variance" : var_adj_T_pos}
 
-            ##### Results table
+            # -- Results table
             results = {"z" : z,
                        "w" : t_val,
                        "pval" : p_val}
 
-
-
-
-
         if self.parameters["Test name"] != "Wilcoxon signed-rank test":
-
             # P value tails
             pval_lt = scipy.stats.t.cdf(stat, dof)
             pval_rt = 1 - scipy.stats.t.cdf(stat, dof)
-
-
-
-
 
         # Creating testing information table
         if self.parameters["Test name"] == "Wilcoxon signed-rank test":
             ...
 
-
         else:
-
             if self.parameters["Test name"] == "Independent samples t-test":
                 test_name = "Independent samples t-test with equal variances"
             elif self.parameters["Test name"] == "Welch's t-test":
@@ -405,10 +330,7 @@ class difference_test(object):
             else:
                 test_name = self.parameters["Test name"]
 
-
-
             dof_type = "Degrees of freedom ="
-
             if self.parameters["Test name"] == "Welch's t-test" :
                 if self.parameters["Welch DoF"] == "satterthwaite":
                     dof_type = "Satterthwaite's Degrees of freedom ="
@@ -416,6 +338,7 @@ class difference_test(object):
                     dof_type = "Welch's Degrees of freedom ="
 
 
+            # -- Result table
             result_table = {test_name : [f"Difference ({self.parameters['Categories'][0]} - {self.parameters['Categories'][1]})",
                                                             dof_type,
                                                             f"{stat_name} =",
@@ -432,15 +355,9 @@ class difference_test(object):
 
                                          ]}
 
-
-
-
-
         # Creating effect size table
         if effect_size is not None:
-
             if self.parameters["Test name"] == "Wilcoxon signed-rank test":
-
                 if effect_size != "r":
                     print(" ",
                           f"Rank-Biserial r  and Pearson r will be calulcated for the {self.parameters['Test name']}.",
@@ -450,14 +367,11 @@ class difference_test(object):
                 results["Rank-Biserial r"] = (descriptives["sum ranks"][0] / descriptives["sum ranks"][-1]) - (descriptives["sum ranks"][1] / descriptives["sum ranks"][-1])
                 results["Pearson r"] = results["z"] / numpy.sqrt(descriptives["obs"][-1])
 
-
             else:
                 for es in effect_size:
-
                     if es == "Cohen's D":
-
                         if self.parameters["Test name"] == "Paired samples t-test":
-                            #### DECIDE IF YOU WANT TO SUPPORT THIS VERSION - USED IN RESEARCHPY TTEST()
+                            # -- DECIDE IF YOU WANT TO SUPPORT THIS VERSION - USED IN RESEARCHPY TTEST()
                             # Cohen's Dz (within-subjects design)
                             #d = stat / numpy.sqrt(group1_info["N"])
                             #result_table[self.parameters["Test name"]].append("Cohen's Dz")
@@ -472,10 +386,8 @@ class difference_test(object):
                             # Cohen's d (between-subjects desgn)
                             d = (group1_info['Mean'] - group2_info["Mean"]) / numpy.sqrt((((group1_info["N"] - 1)*group1_info["Variance"] + (group2_info["N"] - 1)*group2_info["Variance"]) / (group1_info["N"] + group2_info["N"] - 2)))
 
-
                             result_table[test_name].append("Cohen's Ds")
                             result_table["Results"].append(float(d))
-
 
                     if es == "Hedge's G":
                         if self.parameters["Test name"] == "Paired samples t-test":
@@ -497,14 +409,11 @@ class difference_test(object):
                             result_table[test_name].append("Hedge's G")
                             result_table["Results"].append(float(g))
 
-
-
                     if es == "Glass's delta1":
                         d1 = (group1_info["Mean"] - group2_info["Mean"]) / group1_info["SD"]
 
                         result_table[test_name].append("Glass's delta1")
                         result_table["Results"].append(float(d1))
-
 
                     if es == "Glass's delta2":
                         d2 = (group1_info["Mean"] - group2_info["Mean"]) / group2_info["SD"]
@@ -512,33 +421,19 @@ class difference_test(object):
                         result_table[test_name].append("Glass's delta2")
                         result_table["Results"].append(float(d2))
 
-
-
                     if es == "r":
                         r = stat / numpy.sqrt(stat**2 + dof)
 
                         result_table[test_name].append("Point-Biserial r")
                         result_table["Results"].append(float(r))
 
-
-
-
-
-        # Getting the summary table ready - part 2
-
-
-
-
-        #diff[f"{int(self.parameters['Conf. Level'] * 100)}% Conf."] = float(ci_lower_diff)
-        #diff["Interval"] = float(ci_upper_diff)
+        # -- Getting the summary table ready - part 2
         if self.parameters["Test name"] != "Wilcoxon signed-rank test":
             diff[f"{int(self.parameters['Conf. Level'] * 100)}% Conf. Interval"] = [ci_lower_diff, ci_upper_diff]
-
 
             # P value tails
             #pval_lt = scipy.stats.t.cdf(stat, dof, loc = diff["Mean"], scale = diff["SE"])
             #pval_rt = 1 - scipy.stats.t.cdf(stat, dof, loc = diff["Mean"], scale = diff["SE"])
-
 
             group1_table = pandas.DataFrame.from_dict(group1_info, orient = 'index').T
             group2_table = pandas.DataFrame.from_dict(group2_info, orient = 'index').T
@@ -561,8 +456,6 @@ class difference_test(object):
                     for value in row:
                         row[idx] = round(value, 4)
                         idx +=1
-
-
 
             # Returning the information
             if return_type == "Dataframe":

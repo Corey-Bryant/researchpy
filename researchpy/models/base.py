@@ -1,0 +1,840 @@
+from researchpy.engine import DesignMatrix
+
+from researchpy.utility import *
+from researchpy.models.postestimation.predict import predict
+from researchpy.models.families import get_family
+from researchpy.containers import (
+    ModelDesignSpec, SolverOptions,
+    FitStatistics, ModelDiagnostics,
+    ModelEffects, CoefResults, Term,
+)
+from researchpy.statistics import (
+    _estimate_confidence_interval, _compute_pvalue
+)
+
+
+
+
+# Base model class for regression models. This class is not meant to be used directly, but rather to be inherited by
+# specific regression model classes (e.g., Regress, Anova, GLM, Logistic, etc.). It contains common functionality and
+# attributes that are shared across different types of regression models.
+class BaseModel(DesignMatrix):
+    """
+
+    This is the base -model- object for Researchpy. By default, missing
+    observations are dropped from the data. -matrix_type- parameter determines
+    which design matrix will be returned; value of 1 will return a design matrix
+    with the intercept, while a value of 0 will not.
+
+    """
+
+    def __init__(self, formula, data={}, conf_level=0.95,
+                 family="gaussian", link="identity",
+                 solver_options: object = None, table_decimals=None,
+                 include_intercept: bool = True, ensure_full_rank: bool = True,
+                 **kwargs, ):
+
+
+        self.__name__ = "Researchpy.BaseModel"
+
+        # -- Checking parameters and attributes --
+        if not hasattr(self, "SolverOptions"):
+            raise NotImplementedError(
+                    f"{type(self).__name__} must have a self.SolverOptions attribute."
+            )
+
+        if not hasattr(self, "_table_decimals"):
+            self._table_decimals = {
+                "Coef.": 2, "Std. Err.": 3, "test_stat": 4, "test_stat_p": 4, "CI": 2,
+                "Root MSE": 4, "R-squared": 4, "Adj R-squared": 4, "Sum of Squares": 4,
+                'Degrees of Freedom': 1, 'Mean Squares': 4, 'Effect size': 4
+            }
+        if table_decimals is not None:
+            self._table_decimals = self._table_decimals | table_decimals
+
+
+        # -- Creating the matrix --
+        dm = DesignMatrix.from_formula(
+                formula,
+                data,
+                output="numpy",
+                include_intercept=include_intercept,
+                ensure_full_rank=ensure_full_rank,
+        )
+        self.DV = dm.DV
+        self.IV = dm.IV
+        self.model_terms = dm.model_terms
+        self.n, self.k = self.IV.shape
+
+        # -- Initializing dataclass attributes for BaseModel --
+        self.ModelDesignSpec = ModelDesignSpec(
+            formula = dm.formula,
+            model_terms = self.model_terms,
+            family = get_family(family),
+            link = link,
+            solver_options = self.SolverOptions,
+            solver_method = self.SolverOptions.estimation_method,
+            ci_level = conf_level,
+            report_betas_as = kwargs.get("report_betas_as", "coef")
+        )
+
+        self.FitStatistics = FitStatistics(
+            n = self.n,
+            k = self.k,
+            test_stat_name = "F"
+        )
+
+        self.CoefResults = CoefResults()
+        self.CoefResults.term = list(self.model_terms['rhs'].column_map.keys())
+        self.CoefResults.report_betas_as = kwargs.get("report_betas_as", "coef")
+
+        # -- ModelDiagnostics dataclass is populated during fit() and post-estimation checks.
+        # Initialized here to ensure it exists for summary() and other methods that may
+        # reference it before fitting.
+        self.Diagnostics = ModelDiagnostics()
+
+        # -- Resolving the coefficient test-statistic --
+        if kwargs.get("test_stat_name", None) is not None:
+            test_stat_name = kwargs.get("test_stat_name")
+            if test_stat_name not in ["t", "z"]:
+                raise ValueError(f"Invalid test_stat_name: {test_stat_name}. Must be 't' or 'z'.")
+            self.CoefResults.test_stat_name = test_stat_name
+        elif family == "gaussian":
+            self.CoefResults.test_stat_name = "t"
+        else:
+            self.CoefResults.test_stat_name = "z"
+
+
+    #---------------------------------------------------------------------------#
+    #                       Shared Computational Methods                        #
+    # --------------------------------------------------------------------------#
+    def _from_formula(self, formula, data, output="numpy", include_intercept=True,
+                      ensure_full_rank=True, **kwargs, ):
+
+        return self.from_formula(formula, data, output=output, include_intercept=include_intercept,
+                                 ensure_full_rank=ensure_full_rank, **kwargs, )
+
+
+    def fit(self):
+        raise NotImplementedError(
+                f"{type(self).__name__} must override fit()."
+        )
+
+
+    def _confidence_interval(self, confidence=0.95, distribution="normal", dof=None):
+        """
+        Estimate the confidence interval for a given point estimate and scale error estimate.
+
+        Parameters
+        ----------
+        confidence : float, optional
+            The desired confidence level (between 0 and 1). Default is 0.95 for a 95% confidence interval.
+        distribution : str, optional
+            The name of the distribution to use for the confidence interval calculation. Default is "normal" for the normal distribution.
+        dof : int, optional
+            Degrees of freedom, required if using a t-distribution.
+        decimals : int, optional
+            Number of decimal places to round the results to. If None, no rounding is applied.
+
+        Returns
+        -------
+        list
+            A list containing the lower and upper bounds of the confidence interval.
+        """
+        conf_int_lower = []
+        conf_int_upper = []
+
+        for beta, se in zip(self.CoefResults.betas, self.CoefResults.std_error):
+            ci_bounds = _estimate_confidence_interval(beta, se, distribution=distribution, confidence=confidence, dof=dof)
+
+            conf_int_lower.append(ci_bounds.statistics["lower"])
+            conf_int_upper.append(ci_bounds.statistics["upper"])
+
+
+        self.CoefResults.conf_int_lower = np.array(conf_int_lower)
+        self.CoefResults.conf_int_upper = np.array(conf_int_upper)
+
+
+    def predict(self, estimate=None, trans=None, decimals=4):
+        return predict(self, estimate=estimate, trans=trans, decimals=decimals)
+
+
+    #---------------------------------------------------------------------------#
+    #                   Shared Returning Results Methods                        #
+    # --------------------------------------------------------------------------#
+    def _get_coefficient_results(self, na_rep: object = '', pretty_format=True, table_decimals=None,
+                                    coef_transform=None):
+        """Build a prettified coefficient table as a dictionary.
+
+        Uses ``self.ModelDesignSpec`` for structural info (term names, factor
+        flags, reference categories, cleaned column names) and
+        ``self.CoefResults`` for the raw statistics.  ``CoefResults.term``
+        remains the original Patsy column names; cleaned names are sourced
+        from ``ModelTerms.column_map``.
+
+        Parameters
+        ----------
+        na_rep : object
+            Representation for missing values.
+        pretty_format : bool
+            Whether to format the output for display. Default is True.
+        table_decimals : dict or None
+            Override decimal settings.  Merged with ``self._table_decimals``.
+        coef_transform : callable or None
+            Optional transformation function applied to coefficients and
+            confidence interval bounds **before** rounding for display.
+            For example, ``np.exp`` to convert log-odds to odds ratios.
+            Standard errors, test statistics, and p-values are NOT transformed.
+            When ``None`` (default), no transformation is applied.
+
+        Returns
+        -------
+        dict
+            Keys are column header strings, values are equal-length lists.
+            Intended to be converted to a DataFrame by the caller.
+        """
+        if table_decimals is not None:
+            self._table_decimals = self._table_decimals | table_decimals
+
+
+        # ---- Resolve sources -------------------------------------------------
+        dv_name = self.ModelDesignSpec.model_terms['lhs'].terms[0].name
+        ci_level = int(self.ModelDesignSpec.ci_level * 100)
+        test_stat_name = self.CoefResults.test_stat_name
+
+        # Decimal settings
+        d_coef = self._table_decimals.get("Coef.", 2)
+        d_se = self._table_decimals.get("Std. Err.", 3)
+        d_ts = self._table_decimals.get("test_stat", 4)
+        d_p = self._table_decimals.get("test_stat_p", 4)
+        d_ci = self._table_decimals.get("CI", 2)
+
+        # Build positional index: original Patsy column name → array index
+        coef_terms = list(self.CoefResults.term)
+        col_to_idx = {col: i for i, col in enumerate(coef_terms)}
+
+        # Column map for display names
+        column_map = self.ModelDesignSpec.model_terms['rhs'].column_map  # orig col → cleaned col
+
+        # ---- Helper to extract a stats row for a given original column name --
+        def _stats_row(orig_col):
+            idx = col_to_idx[orig_col]
+
+            # Extract raw values
+            beta_raw = self.CoefResults.betas[idx]
+            se_raw = self.CoefResults.std_error[idx]
+            ts_raw = self.CoefResults.test_stat[idx]
+            pv_raw = self.CoefResults.test_pval[idx]
+            ci_lo_raw = self.CoefResults.conf_int_lower[idx]
+            ci_hi_raw = self.CoefResults.conf_int_upper[idx]
+
+            # Apply transformation to betas, SEs, and CIs BEFORE rounding.
+            # When coef_transform is exp (odds ratios), the delta method gives:
+            #   SE(OR) = OR × SE(β) = exp(β) × SE(β)
+            # The test statistic (z = β/SE(β)) and p-value are invariant
+            # under monotonic transforms and remain on the original scale.
+            if coef_transform is not None:
+                beta = np.round(coef_transform(beta_raw), d_coef)
+                ci_lo = np.round(coef_transform(ci_lo_raw), d_ci)
+                ci_hi = np.round(coef_transform(ci_hi_raw), d_ci)
+                # Delta method: SE on transformed scale = |f'(β)| × SE(β)
+                # For exp: SE(OR) = exp(β) × SE(β) = OR × SE(β)
+                se = np.round(coef_transform(beta_raw) * se_raw, d_se)
+            else:
+                beta = np.round(beta_raw, d_coef)
+                ci_lo = np.round(ci_lo_raw, d_ci)
+                ci_hi = np.round(ci_hi_raw, d_ci)
+                se = np.round(se_raw, d_se)
+
+            ts = np.round(ts_raw, d_ts)
+            pv = np.round(pv_raw, d_p)
+
+            return as_numeric(beta), as_numeric(se), as_numeric(ts), as_numeric(pv), [as_numeric(ci_lo),
+                                                                                      as_numeric(ci_hi)
+                                                                                      ]
+
+
+        # ---- Build output rows -----------------------------------------------
+        col_dv = []
+        col_coef = []
+        col_se = []
+        col_ts = []
+        col_pv = []
+        col_ci = []
+
+        for term in self.ModelDesignSpec.model_terms['rhs'].terms:
+
+            is_factor = (
+                term.is_factor if not term.is_interaction
+                else (any(term.is_factor) if isinstance(term.is_factor, list) else term.is_factor)
+            )
+
+            if not pretty_format:
+                # Raw output — one row per estimated column, using original Patsy names
+                for orig_col in term.columns:
+                    col_dv.append(orig_col)
+                    beta, se, ts, pv, ci = _stats_row(orig_col)
+                    col_coef.append(beta)
+                    col_se.append(se)
+                    col_ts.append(ts)
+                    col_pv.append(pv)
+                    col_ci.append(ci)
+
+            elif not is_factor:
+                # Continuous variable or Intercept — one row per column
+                for orig_col in term.columns:
+                    col_dv.append(column_map[orig_col])
+                    beta, se, ts, pv, ci = _stats_row(orig_col)
+                    col_coef.append(beta)
+                    col_se.append(se)
+                    col_ts.append(ts)
+                    col_pv.append(pv)
+                    col_ci.append(ci)
+
+            elif not term.is_interaction:
+                # Simple factor — header row + reference row + level rows
+                # Header row (term name, blank stats)
+                col_dv.append(term.name)
+                col_coef.append("")
+                col_se.append("")
+                col_ts.append("")
+                col_pv.append("")
+                col_ci.append("")
+
+                # Reference row
+                ref_label = str(term.reference) if term.reference is not None else ""
+                col_dv.append(ref_label)
+                col_coef.append("(reference)")
+                col_se.append("")
+                col_ts.append("")
+                col_pv.append("")
+                col_ci.append("")
+
+                # Estimated level rows
+                for orig_col in term.columns:
+                    col_dv.append(column_map[orig_col])
+                    beta, se, ts, pv, ci = _stats_row(orig_col)
+                    col_coef.append(beta)
+                    col_se.append(se)
+                    col_ts.append(ts)
+                    col_pv.append(pv)
+                    col_ci.append(ci)
+
+            else:
+                # Interaction term — header row + estimated level rows only
+                col_dv.append(term.name)
+                col_coef.append("")
+                col_se.append("")
+                col_ts.append("")
+                col_pv.append("")
+                col_ci.append("")
+
+                for orig_col in term.columns:
+                    col_dv.append(column_map[orig_col])
+                    beta, se, ts, pv, ci = _stats_row(orig_col)
+                    col_coef.append(beta)
+                    col_se.append(se)
+                    col_ts.append(ts)
+                    col_pv.append(pv)
+                    col_ci.append(ci)
+
+
+
+        return {
+            dv_name: col_dv,
+            "Coef.": col_coef,
+            "Std. Err.": col_se,
+            f"{test_stat_name}": col_ts,
+            "p-value": col_pv,
+            f"{ci_level}% Conf. Interval": col_ci,
+        }
+
+
+    def _get_ModelResults(self, return_type="Dataframe", pretty_format=True, table_decimals=None, **kwargs):
+
+        raise NotImplementedError(
+            f"{type(self).__name__} must override _get_ModelResults() "
+            "to provide self.ModelResults."
+        )
+
+    #---------------------------------------------------------------------------#
+    #                           Shared Summary Methods                          #
+    #---------------------------------------------------------------------------#
+    def _get_summary_parts(self):
+        """
+        Return the DataFrames needed by ``summary()`` to render output.
+
+        Default implementation reads from ``self.ModelResults``.
+        Subclasses that override ``results()`` and set ``self.ModelResults``
+        during ``__init__`` do not need to override this method.
+
+        Returns
+        -------
+        tuple of (model_table_df, fit_statistics_df, body_df)
+            *model_table_df* – DataFrame for the header-left side (e.g.
+            ANOVA decomposition mini-table for OLS; ``None`` for MLE models).
+            *fit_statistics_df* – DataFrame with fit-statistics used to
+            build the header right side.
+            *body_df* – DataFrame used to build the summary body (coefficient
+            table for regression, ANOVA table for Anova, etc.).
+        """
+        mr = self.ModelResults
+        body_df = mr.coefficients if mr.coefficients is not None else mr.model_table
+        return mr.model_table, mr.fit_statistics, body_df
+
+
+    def summary(self, total_width=78, return_string=False, table_decimals=None):
+        """
+        Print a formatted summary of the model results to the terminal.
+
+        Reads directly from ``self.ModelResults`` and composes the output
+        from overridable building blocks:
+
+        - **Header** (left + right side-by-side): ``_summary_header()``
+        - **Body** (coefficient / ANOVA table): ``_summary_coef_table()``
+
+        Parameters
+        ----------
+        total_width : int, optional
+            Character width for the summary output. Default is 78.
+        return_string : bool, optional
+            If True, returns the formatted string instead of printing.
+            Default is False (prints to terminal).
+        table_decimals : dict, optional
+            Dictionary specifying decimal places for different statistics.
+            Supported keys: "Coef.", "Std. Err.", "test_stat", "test_stat_p",
+            "CI", "Root MSE", "R-squared", "Adj R-squared", "Sum of Squares",
+            "Degrees of Freedom", "Mean Squares", "Effect size".
+            User-provided values override the base defaults.
+
+        Returns
+        -------
+        str or None
+            If *return_string* is True, returns the formatted summary string.
+            Otherwise, prints to terminal and returns None.
+        """
+        # Base decimal defaults — user values override these
+        if table_decimals is not None:
+            self._table_decimals = self._table_decimals | table_decimals
+
+
+        fit_statistics_df = self.ModelResults.as_dataframe("fit_statistics", self.ModelResults.fit_statistics)
+        model_table_df = self.ModelResults.as_dataframe("model_table", self.ModelResults.model_table)
+        coefficients_df = self.ModelResults.as_dataframe("coefficients", self.ModelResults.coefficients)
+
+        output_lines = []
+
+        # === HEADER SECTION ===
+        output_lines.append(
+            self._summary_header(total_width, model_summary_df=model_table_df, descriptives_df=fit_statistics_df)
+        )
+
+        # === BODY SECTION ===
+        output_lines.append(
+            self._summary_coef_table(coefficients_df, total_width, table_decimals=self._table_decimals)
+        )
+
+        # === DIAGNOSTICS FOOTER (only rendered when diagnostics exist) ===
+        diagnostics_block = self._summary_diagnostics(total_width)
+        if diagnostics_block:
+            output_lines.append(diagnostics_block)
+
+
+        summary_str = "\n".join(output_lines)
+
+        if return_string:
+            return summary_str
+        else:
+            print(summary_str)
+            return None
+
+
+    def _summary_diagnostics(self, width=78):
+        """
+        Build the diagnostics footer block for the summary output.
+
+        Renders optimization and model-fit diagnostics (convergence,
+        ill-conditioning, separation) stored in ``self.Diagnostics``. Returns
+        an empty string when there are no diagnostic messages, so clean fits
+        produce output byte-identical to the pre-diagnostics behavior.
+
+        Messages are ordered, ``Warning`` (inference unreliable) before
+        ``Note`` (informational); each using a fixed 9-character label field so
+        wrapped continuation lines align beneath the message text.
+
+        Parameters
+        ----------
+        width : int, optional
+            Total character width of the output. Default is 78.
+
+        Returns
+        -------
+        str
+            Formatted diagnostics block, or ``""`` when there is nothing to
+            report.
+        """
+        import textwrap
+
+        diagnostics = getattr(self, "Diagnostics", None)
+        if diagnostics is None:
+            return ""
+
+        messages = getattr(diagnostics, "messages", None) or []
+        if not messages:
+            return ""
+
+        # Each message is a (severity, text) pair. Accept bare strings too,
+        # defaulting them to "Warning" severity.
+        normalized = []
+        for msg in messages:
+            if isinstance(msg, (tuple, list)) and len(msg) == 2:
+                severity, text = msg
+            else:
+                severity, text = "Warning", str(msg)
+            normalized.append((str(severity).capitalize(), text))
+
+        # Warnings first, then Notes; stable within each group for determinism.
+        severity_order = {"Warning": 0, "Note": 1}
+        normalized.sort(key=lambda item: severity_order.get(item[0], 2))
+
+        # Fixed 9-char label field (e.g. "Warning: " / "Note:    ") with a
+        # 4-space indent; continuation lines hang beneath the message text.
+        indent = "    "
+        label_width = 9
+        subsequent_indent = " " * (len(indent) + label_width)
+
+        lines = ["Diagnostics:"]
+        for severity, text in normalized:
+            label = f"{severity + ':':<{label_width}}"
+            wrapped = textwrap.fill(
+                text,
+                width=width,
+                initial_indent=f"{indent}{label}",
+                subsequent_indent=subsequent_indent,
+            )
+            lines.append(wrapped)
+
+        lines.append("-" * width)
+
+        return "\n".join(lines)
+
+
+    def _get_model_display_name(self):
+        """
+        Return a human-readable display name for the model.
+
+        Maps internal __name__ attributes to user-friendly display names.
+        Subclasses can override to provide custom display names.
+
+        Returns
+        -------
+        str
+            Human-readable model name.
+        """
+        model_name = getattr(self, '__name__', 'Model').replace('Researchpy.', '').replace('researchpy.', '')
+        model_display_names = {
+            'OLS': 'Linear Regression (OLS)',
+            'LinearRegression': 'Linear Regression (OLS)',
+            'LinearModel': 'Linear Regression (OLS)',
+            'lm': 'Linear Regression (OLS)',
+            'LM': 'Linear Regression (OLS)',
+            'Regress': 'Linear Regression (OLS)',
+            'Anova': 'Analysis of Variance',
+            'ANOVA': 'Analysis of Variance',
+            'anova': 'Analysis of Variance',
+            'LogisticRegression': 'Logistic Regression',
+            'Logistic': 'Logistic Regression',
+            'Logit': 'Logistic Regression',
+            'GeneralizedLinearModel': 'Generalized Linear Model',
+            'CoreModel': 'Model'
+        }
+        return model_display_names.get(model_name, model_name)
+
+
+    def _summary_header(self, width=78, model_summary_df=None, descriptives_df=None):
+        """
+        Build the header section of the summary output by composing
+        left and right sub-sections side-by-side.
+
+        Subclasses should override ``_summary_header_left()`` and/or
+        ``_summary_header_right()`` to customize header content for their
+        model type, rather than overriding this method directly.
+
+        Parameters
+        ----------
+        width : int, optional
+            Total character width of the output. Default is 78.
+        descriptives_df : DataFrame or None, optional
+            Descriptives DataFrame from ``self.results()``.  When provided,
+            it is forwarded to ``_summary_header_right()`` so that subclasses
+            can render fit statistics directly from the DataFrame.
+
+        Returns
+        -------
+        str
+            Formatted header string.
+        """
+        left_lines = self._summary_header_left(width, model_summary_df=model_summary_df)
+        right_lines = self._summary_header_right(width, descriptives_df=descriptives_df)
+
+        # Pad shorter list to match longer
+        max_lines = max(len(left_lines), len(right_lines))
+        while len(left_lines) < max_lines: left_lines.append("")
+        while len(right_lines) < max_lines: right_lines.append("")
+
+        # Calculate left column width and gap
+        left_width = width * 55 // 100
+        gap = "    "
+        combined = []
+        for left_text, right_text in zip(left_lines, right_lines):
+            combined.append(f"{left_text:<{left_width}}{gap}{right_text}")
+
+        return "\n".join(combined)
+
+
+    def _summary_header_left(self, width=78, model_summary_df=None):
+        """
+        Build the left side of the summary header.
+
+        Base implementation returns the model display name.
+        Subclasses should override to add model-specific content
+        (e.g., ANOVA source table for linear models, log-likelihood for MLE models).
+
+        Parameters
+        ----------
+        width : int, optional
+            Total character width of the output. Default is 78.
+        model_summary_df : DataFrame or None, optional
+            Model summary DataFrame from ``self.results()``.  When None
+            (e.g. for ANOVA) only the display name is shown.
+
+        Returns
+        -------
+        list of str
+            Lines for the left side of the header.
+        """
+
+        # ---- Resolve Conent ----------------------------------
+        if model_summary_df is None:
+            return [self._get_model_display_name()]
+
+        return [self._get_model_display_name()]
+
+
+    def _summary_header_right(self, width=78, descriptives_df=None):
+        """
+        Build the right side of the summary header.
+
+        Base implementation returns the number of observations.
+        Subclasses should override to add model-specific fit statistics
+        (e.g., R-squared for linear models, LR chi-squared for MLE models).
+
+        Parameters
+        ----------
+        width : int, optional
+            Total character width of the output. Default is 78.
+        descriptives_df : DataFrame or None, optional
+            Descriptives DataFrame from ``self.results()``.  The base
+            implementation ignores this; subclasses can use it to render
+            fit statistics from the DataFrame.
+
+        Returns
+        -------
+        list of str
+            Lines for the right side of the header.
+        """
+        return [f"Number of obs = {self.n:>8}"]
+
+
+    def _summary_coef_table(self, coef_df, width=78, table_decimals=None):
+        """
+        Build the coefficient table section of the summary output using
+        ``DataFrame.to_string()``.
+
+        The DataFrame is expected to have been produced by
+        ``self.results(return_type="Dataframe")`` and to contain columns for
+        the DV name (variable labels), coefficient estimates, standard errors,
+        test statistics, p-values, and confidence intervals.
+
+        Parameters
+        ----------
+        coef_df : DataFrame
+            Coefficient table DataFrame from ``self.results()``.
+        width : int
+            Total character width of the output.
+        table_decimals : dict, optional
+            Dictionary specifying decimal places for different statistics.
+            Supported keys: "Coef.", "Std. Err.", "test_stat", "test_stat_p",
+            "CI".  Falls back to base defaults when not provided.
+
+        Returns
+        -------
+        str
+            Formatted coefficient table string.
+        """
+        # ---- Resolve decimal places -------------------------------------
+        if table_decimals is not None:
+            self._table_decimals = self._table_decimals | table_decimals
+
+        table = coef_df.copy()
+
+        # ---- Identify column names dynamically -------------------------
+        dv_name = table.columns[0]  # First column is the variable name
+
+        beta_col = "Coef."
+        if "Odds Ratio" in table.columns:
+            beta_col = "Odds Ratio"
+
+        test_stat_label = self.CoefResults.test_stat_name
+        ci_col_name = f"{int(self.ModelDesignSpec.ci_level * 100)}% Conf. Interval"
+
+        # ---- Format CI list column into "[lower, upper]" strings --------
+        if ci_col_name in table.columns:
+            ci_dec = self._table_decimals.get("CI", 2)
+
+            def _fmt_ci_combined(val):
+                if isinstance(val, (list, tuple)) and len(val) == 2:
+                    lower = val[0]
+                    upper = val[1]
+                    try:
+                        return f"[{float(lower):.{ci_dec}f}, {float(upper):.{ci_dec}f}]"
+                    except (ValueError, TypeError):
+                        return ""
+                try:
+                    if pd.isna(val):
+                        return ""
+                except (TypeError, ValueError):
+                    pass
+                return str(val)
+
+            table[ci_col_name] = table[ci_col_name].apply(_fmt_ci_combined)
+
+        # ---- Select and order display columns ---------------------------
+        display_cols = [dv_name]
+        for col in [beta_col, "Std. Err.", test_stat_label, "p-value",
+                     ci_col_name]:
+            if col in table.columns:
+                display_cols.append(col)
+        table = table[display_cols]
+
+        # ---- Coerce numeric columns to float ----------------------------
+        # Skip the beta column — it may contain "(reference)" strings
+        # Skip the CI column — it is now a pre-formatted string
+        for col in display_cols[1:]:
+            if col in (beta_col, ci_col_name):
+                continue
+            table[col] = pd.to_numeric(table[col], errors="coerce")
+
+        # ---- Per-column formatters (using shared static methods) -----------
+        formatters = {
+            dv_name:         self._fmt_str,
+            beta_col:        self._fmt_beta(self._table_decimals.get("Coef.", 2)),
+            "Std. Err.":     self._fmt_float(self._table_decimals.get("Std. Err.", 4)),
+            test_stat_label: self._fmt_float(self._table_decimals.get("test_stat", 4)),
+            "p-value":       self._fmt_float(self._table_decimals.get("test_stat_p", 4)),
+            ci_col_name:     self._fmt_str,
+        }
+        # Only include formatters for columns actually in the table
+        formatters = {k: v for k, v in formatters.items() if k in table.columns}
+
+        # ---- Build the output string ------------------------------------
+        sep = "-" * width
+
+        table_str = table.to_string(
+            index=False,
+            na_rep="",
+            formatters=formatters,
+            justify="right",
+        )
+
+        lines = [sep, table_str, sep]
+
+        return "\n".join(lines)
+
+
+    # ------------------------------------------------------------------ #
+    #              Shared formatters for DataFrame.to_string()           #
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _fmt_float(decimals):
+        """Return a ``to_string`` formatter: renders floats or blank for NaN."""
+        def _f(val):
+            try:
+                if pd.isna(val):
+                    return ""
+            except (TypeError, ValueError):
+                pass
+            try:
+                return f"{float(val):.{decimals}f}"
+            except (ValueError, TypeError):
+                return str(val)
+        return _f
+
+    @staticmethod
+    def _fmt_int(val):
+        """``to_string`` formatter: renders integers or blank for NaN."""
+        try:
+            if pd.isna(val):
+                return ""
+        except (TypeError, ValueError):
+            pass
+        try:
+            return f"{int(val)}"
+        except (ValueError, TypeError):
+            return str(val)
+
+    @staticmethod
+    def _fmt_str(val):
+        """``to_string`` formatter: keeps strings, blanks NaN."""
+        if val is None:
+            return ""
+        try:
+            if pd.isna(val):
+                return ""
+        except (TypeError, ValueError):
+            pass
+        return str(val)
+
+    @staticmethod
+    def _fmt_beta(decimals):
+        """``to_string`` formatter: renders '(reference)' strings or float."""
+        def _f(val):
+            if isinstance(val, str):
+                return val  # e.g. "(reference)"
+            try:
+                if pd.isna(val):
+                    return ""
+            except (TypeError, ValueError):
+                pass
+            try:
+                return f"{float(val):.{decimals}f}"
+            except (ValueError, TypeError):
+                return str(val)
+        return _f
+
+
+
+    # ------------------------------------------------------------------ #
+    #  Container protocol                                                #
+    # ------------------------------------------------------------------ #
+    def info(self):
+        lines = [f"{self.__class__.__name__}("]
+        for k, v in self.ModelDesignSpec.__dict__.items():
+            if v is None or v == '' or v == {}:
+                pass
+
+            else:
+                if k == "model_terms":
+                    lines.append(f"{k}:" + " {")
+                    for kk in v.keys():
+                        lines.append(f"{kk}: {v[kk].info()},")
+                    lines.append("}")
+
+                elif k in ['ci_level', 'family', 'link', 'solver_options', 'solver_method']:
+                    lines.append(f"{k}:")
+                    lines.append(f"\t{v}, ")
+
+        return "\n".join(lines)
+
+    def __repr__(self):
+        return self.info()
