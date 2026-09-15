@@ -45,7 +45,7 @@ df = pd.DataFrame({
 ### ANOVA
 
 ```python
-model = rp.anova("score ~ C(group)", data=df) # Type III sum of squares by default
+model = rp.Anova("score ~ C(group)", data=df) # Type III sum of squares by default
 descriptives, results = model.results()
 print(descriptives, results, sep = "\n"*2)
 ```
@@ -107,4 +107,4 @@ print(researchpy.__version__)
 
 Current citation with version number:
 
-> Bryant, C. (2018–2026). *researchpy* (Version 0.3.7.2) [Python package]. https://github.com/Corey-Bryant/researchpy
+> Bryant, C. (2018–2026). *researchpy* (Version 0.3.7.3) [Python package]. https://github.com/Corey-Bryant/researchpy
