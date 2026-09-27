@@ -23,11 +23,6 @@ def test_ttest_independent():
     assert round(stats["t ="], 4) == round(float(t_ref), 4)
     assert round(stats["Two side test p value ="], 4) == round(float(p_ref), 4)
 
-    p_less = st.ttest_rel(group1, group2, alternative="less").pvalue
-    p_greater = st.ttest_rel(group1, group2, alternative="greater").pvalue
-    assert stats["Difference < 0 p value ="] == round(float(p_less), 4)
-    assert stats["Difference > 0 p value ="] == round(float(p_greater), 4)
-
 
 @pytest.mark.parametrize(
     "group1, group2",
@@ -53,3 +48,8 @@ def test_ttest_paired(group1, group2):
     t_ref, p_ref = st.ttest_rel(group1, group2)
     assert round(stats["t ="], 4) == round(float(t_ref), 4)
     assert round(stats["Two side test p value ="], 4) == round(float(p_ref), 4)
+
+    p_less = st.ttest_rel(group1, group2, alternative="less").pvalue
+    p_greater = st.ttest_rel(group1, group2, alternative="greater").pvalue
+    assert stats["Difference < 0 p value ="] == round(float(p_less), 4)
+    assert stats["Difference > 0 p value ="] == round(float(p_greater), 4)
