@@ -107,11 +107,6 @@ def ttest(group1, group2, group1_name= None, group2_name= None,
         lt_p_val = scipy.stats.t.cdf(t_val, dof)
         rt_p_val = 1 - scipy.stats.t.cdf(t_val, dof)
 
-        if t_val > 0:
-            temp = rt_p_val
-            rt_p_val = lt_p_val
-            lt_p_val = temp
-
         # -- Effect sizes
         # Cohen's d (1988)
         d = (group1.mean() - group2.mean()) / diff.std()
