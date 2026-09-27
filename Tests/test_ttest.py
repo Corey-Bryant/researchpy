@@ -23,12 +23,24 @@ def test_ttest_independent():
     assert round(stats["t ="], 4) == round(float(t_ref), 4)
     assert round(stats["Two side test p value ="], 4) == round(float(p_ref), 4)
 
+    p_less = st.ttest_rel(group1, group2, alternative="less").pvalue
+    p_greater = st.ttest_rel(group1, group2, alternative="greater").pvalue
+    assert stats["Difference < 0 p value ="] == round(float(p_less), 4)
+    assert stats["Difference > 0 p value ="] == round(float(p_greater), 4)
 
-def test_ttest_paired():
+
+@pytest.mark.parametrize(
+    "group1, group2",
+    [
+        ([2, 4, 5, 7, 8], [1, 2, 3, 4, 5]),
+        ([1, 2, 3, 4, 5], [2, 4, 5, 7, 8]),
+    ],
+)
+def test_ttest_paired(group1, group2):
     # Use non-degenerate paired data (identical groups yield an undefined
     # t = 0/0 = NaN because the differences have zero variance).
-    group1 = pd.Series([1, 2, 3, 4, 5])
-    group2 = pd.Series([2, 4, 5, 7, 8])
+    group1 = pd.Series(group1)
+    group2 = pd.Series(group2)
 
     # ttest returns a tuple: (summary_table, results_table)
     summary, results = ttest(group1, group2, equal_variances=True, paired=True)
