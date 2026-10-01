@@ -100,7 +100,7 @@ def ttest(group1, group2, group1_name= None, group2_name= None,
         diff = group1 - group2
 
         test = "Paired samples t-test"
-        t_val, p_val = scipy.stats.ttest_rel(group1, group2)
+        t_val, p_val = scipy.stats.ttest_rel(group1, group2, nan_policy= 'omit')
         dof = group1.count() - 1
 
         # Less than or greater than 0 p_vals
