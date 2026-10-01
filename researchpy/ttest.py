@@ -92,8 +92,13 @@ def ttest(group1, group2, group1_name= None, group2_name= None,
         r = t_val / numpy.sqrt(t_val**2 + dof)
 
     elif equal_variances == True and paired == True:
-        group1 = group1[(group1.notnull()) & (group2.notnull())]
-        group2 = group2[(group1.notnull()) & (group2.notnull())]
+        # Drop pairs where either observation is missing. Compute the mask once
+        # from the original series so both are filtered on the same (aligned)
+        # index; reusing group1.notnull() after reassigning group1 would compare
+        # a shortened series against the full group2.
+        valid = group1.notnull() & group2.notnull()
+        group1 = group1[valid]
+        group2 = group2[valid]
 
         groups = pandas.concat([group1, group2], ignore_index=True)
         groups_diff = numpy.mean(group1) - numpy.mean(group2)
