@@ -169,7 +169,8 @@ def confidence_interval(d, alpha=0.95, n=None, loc=None, scale=None, decimals=4,
     """
     warnings.warn(
             "`confidence_interval` interface and return is changing and will be updated in the future version (0.4.0). "
-            "See `_confidence_interval` for the new interface. See `TestResults` for the new return type. " 
+            "See `_confidence_interval` for the new interface. In v0.4.0 `_confidence_interval` will only be accessable via `confidence_interval`." 
+            "See `TestResults` for the new return type." 
             "The return type will be a `TestResults` object with `lower` and `upper` attributes, and the `alpha` parameter is renamed to `confidence`. " 
             "The `n`, `loc`, and `scale` parameters are removed.",
             FutureWarning,
@@ -203,6 +204,14 @@ def confidence_interval(d, alpha=0.95, n=None, loc=None, scale=None, decimals=4,
 def l_ci(d, alpha=0.95, n=None, loc=None, scale=None, decimals=4):
     """
 
+    .. deprecated:: v0.3.7.2
+        The method ``l_ci`` is being removed and will be updated in the future version (v0.4.0). Please
+        see ``_confidence_interval`` which will be  for the new interface. See `TestResults` for the new return type.
+        As of v0.4.0 a ``TestResults`` object will be returned instead of a list of bounds. The
+        bounds are accessible as ``result.lower`` and ``result.upper``.
+        The former ``alpha`` parameter will be renamed to ``confidence``. The former ``n``, ``loc``, and ``scale``
+        parameters are removed; passing them will raise a ``TypeError`` as of v0.4.0.
+
     Parameters
     ----------
     d : array_like
@@ -229,6 +238,14 @@ def l_ci(d, alpha=0.95, n=None, loc=None, scale=None, decimals=4):
         Returns the lower boud of confidence interval.
 
     """
+    warnings.warn(
+            "`l_ci` is being removed and will be updated in the future version (v0.4.0). "
+            "See `_confidence_interval` for the new interface. See `TestResults` for the new return type. "
+            "The return type will be a `TestResults` object with `lower` and `upper` attributes, and the `alpha` parameter is renamed to `confidence`. "
+            "The `n`, `loc`, and `scale` parameters are removed.",
+            FutureWarning,
+            stacklevel=2,
+    )
 
     if n == None:
         n = count(d) - 1
@@ -246,6 +263,14 @@ def l_ci(d, alpha=0.95, n=None, loc=None, scale=None, decimals=4):
 
 def u_ci(d, alpha=0.95, n=None, loc=None, scale=None, decimals=4):
     """
+
+    .. deprecated:: v0.3.7.2
+        The method ``u_ci`` is being removed and will be updated in the future version (v0.4.0). Please
+        see ``_confidence_interval`` which will be  for the new interface. See `TestResults` for the new return type.
+        As of v0.4.0 a ``TestResults`` object will be returned instead of a list of bounds. The
+        bounds are accessible as ``result.lower`` and ``result.upper``.
+        The former ``alpha`` parameter will be renamed to ``confidence``. The former ``n``, ``loc``, and ``scale``
+        parameters are removed; passing them will raise a ``TypeError`` as of v0.4.0.
 
     Parameters
     ----------
@@ -273,6 +298,14 @@ def u_ci(d, alpha=0.95, n=None, loc=None, scale=None, decimals=4):
         Returns the upper boud of confidence interval.
 
     """
+    warnings.warn(
+            "`u_ci` is being removed and will be updated in the future version (v0.4.0). "
+            "See `_confidence_interval` for the new interface. See `TestResults` for the new return type. "
+            "The return type will be a `TestResults` object with `lower` and `upper` attributes, and the `alpha` parameter is renamed to `confidence`. "
+            "The `n`, `loc`, and `scale` parameters are removed.",
+            FutureWarning,
+            stacklevel=2,
+    )
 
     if n == None:
         n = count(d) - 1
