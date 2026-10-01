@@ -55,6 +55,9 @@ import pandas as pd
 from researchpy.containers import CoreDataclass, ModelTerms
 from researchpy.engine.table import TableTermSpec
 
+from formulaic import Formula
+from formulaic.parser import DefaultFormulaParser
+
 
 # ======================================================================
 # Main dataclass
@@ -83,7 +86,7 @@ class FormulaSpec(CoreDataclass):
         Source DataFrame.
     formula : str or None
         Canonical formula string (generated or user-supplied).
-    weights : str or None
+    weights : np.ndarray or pd.Series or str or None
         Column name for observation weights.
     sub_specs : list of TableTermSpec or None
         Per-term layout specs for mixed formulas that contain both
@@ -97,7 +100,7 @@ class FormulaSpec(CoreDataclass):
     over: Optional[List[str]] = None
     data: Optional[Any] = None          # pd.DataFrame at runtime
     formula: Optional[str] = None
-    weights: Optional[str] = None
+    weights: Optional[Union[np.ndarray, pd.Series, str]] = None
     sub_specs: Optional[List[TableTermSpec]] = None
 
 
@@ -193,6 +196,40 @@ class FormulaSpec(CoreDataclass):
             )
 
         # =============================================================
+        # Infer DV from positional input when grouping keywords are given
+        # =============================================================
+        # Without this, a call such as ``(["y", "z"], df, by="g")`` would
+        # fall through to Convention 2 and silently discard ``by``,
+        # returning an ungrouped result rather than raising.
+        if dv is None and (iv is not None or by is not None or over is not None):
+            group_all = list(iv or []) + list(by or []) + list(over or [])
+
+            if isinstance(arg1, list) and all(isinstance(x, str) for x in arg1):
+                dv = [c for c in arg1 if c not in group_all]
+                arg1 = None
+
+            elif isinstance(arg1, pd.DataFrame):
+                if resolved_data is None:
+                    resolved_data = arg1
+                dv = [c for c in arg1.columns if c not in group_all]
+                arg1 = None
+
+            elif isinstance(arg1, pd.Series):
+                if resolved_data is None:
+                    raise ValueError(
+                        "Grouping keywords ('iv', 'by', 'over') with a Series "
+                        "require 'data' to supply the grouping column(s)."
+                    )
+                dv = [arg1.name if arg1.name is not None else "value"]
+                arg1 = None
+
+            if dv is not None and not dv:
+                raise ValueError(
+                    "No dependent variable remains after removing the grouping "
+                    f"column(s) {group_all}.  Specify 'dv' explicitly."
+                )
+
+        # =============================================================
         # Convention 5: Explicit keywords (dv=, iv=/by=/over=, data=)
         # =============================================================
         if dv is not None:
@@ -210,6 +247,7 @@ class FormulaSpec(CoreDataclass):
                 _validate_columns(over, resolved_data, "over")
 
             formula_str = _args_to_formula(dv=dv, iv=iv, by=by, over=over)
+            formula_obj = _args_as_formula(dv=dv, iv=iv, by=by, over=over, weights=weights,)
 
             return cls(
                 DV=dv,
@@ -217,7 +255,8 @@ class FormulaSpec(CoreDataclass):
                 by=by,
                 over=over,
                 data=resolved_data,
-                formula=formula_str,
+                #formula=formula_str,
+                formula=formula_obj,
                 weights=weights,
             )
 
@@ -243,10 +282,12 @@ class FormulaSpec(CoreDataclass):
                     "Pass it as the second positional argument or use data=."
                 )
             _validate_columns(arg1, resolved_data, "column names")
+            formula_obj = _args_as_formula(dv=arg1, weights=weights,)
 
             return cls(
                 DV=arg1,
                 data=resolved_data,
+                formula=formula_obj,
                 weights=weights,
             )
 
@@ -254,9 +295,13 @@ class FormulaSpec(CoreDataclass):
         # Convention 1: DataFrame (multi-column)
         # =============================================================
         if isinstance(arg1, pd.DataFrame):
+            col_names = list(arg1.columns)
+            formula_obj = _args_as_formula(dv=col_names, weights=weights,)
+
             return cls(
-                DV=list(arg1.columns),
+                DV=col_names,
                 data=arg1,
+                formula=formula_obj,
                 weights=weights,
             )
 
@@ -266,9 +311,12 @@ class FormulaSpec(CoreDataclass):
         if isinstance(arg1, pd.Series):
             col_name = arg1.name if arg1.name is not None else "value"
             df = arg1.to_frame(name=col_name)
+
+            formula_obj = _args_as_formula(dv=[col_name], weights=weights,)
             return cls(
                 DV=[col_name],
                 data=df,
+                formula=formula_obj,
                 weights=weights,
             )
 
@@ -280,12 +328,14 @@ class FormulaSpec(CoreDataclass):
 
             if arr.ndim == 1:
                 df = pd.DataFrame({"value": arr})
-                return cls(DV=["value"], data=df, weights=weights)
+                formula_obj = _args_as_formula(dv=["value"], weights=weights,)
+                return cls(DV=["value"], data=df, formula=formula_obj, weights=weights)
 
             else:
                 col_names = [f"col_{i}" for i in range(arr.shape[1])]
                 df = pd.DataFrame(arr, columns=col_names)
-                return cls(DV=col_names, data=df, weights=weights)
+                formula_obj = _args_as_formula(dv=col_names, weights=weights,)
+                return cls(DV=col_names, data=df, formula=formula_obj, weights=weights)
 
         # =============================================================
         # Unsupported
@@ -306,11 +356,11 @@ class FormulaSpec(CoreDataclass):
 # Formula construction: keywords → formula string
 # ======================================================================
 def _args_to_formula(
-    *,
-    dv: Optional[List[str]] = None,
-    iv: Optional[List[str]] = None,
-    by: Optional[List[str]] = None,
-    over: Optional[List[str]] = None,
+        *,
+        dv: Optional[List[str]] = None,
+        iv: Optional[List[str]] = None,
+        by: Optional[List[str]] = None,
+        over: Optional[List[str]] = None,
 ) -> Optional[str]:
     """Build a formula string from keyword spec parameters.
 
@@ -358,6 +408,80 @@ def _args_to_formula(
 
     return f"{lhs} ~ {' + '.join(rhs_parts)}"
 
+
+
+def _args_as_formula(
+        *,
+        dv: Optional[List[str]] = None,
+        iv: Optional[List[str]] = None,
+        by: Optional[List[str]] = None,
+        over: Optional[List[str]] = None,
+        weights: Optional[str] = None,
+        ensure_structured: bool = True,
+        rhs_as_factors: bool = False,
+) -> Formula:
+    """Build a formula string from keyword spec parameters.
+
+    Reverse mapping
+    ---------------
+    dv="y", iv=["x","k"]         → "y ~ C(x) + C(k)"
+    dv="y", by=["x"]             → "y ~ C(x)"
+    dv="y", by=["x","k"]         → "y ~ C(x):C(k)"
+    dv="y", by=["x"], over=["k"] → "y ~ C(x)*C(k)"
+
+    Parameters
+    ----------
+    dv : list of str or None
+        Dependent variable name(s).
+    iv, by, over : list of str or None
+        Grouping parameters.
+
+    Returns
+    -------
+    Formula
+        Generated formula string, or None if no DV is provided.
+    """
+    if isinstance(dv, list) and len(dv) == 1:
+        lhs = dv[0]
+    elif isinstance(dv, list) and len(dv) > 1:
+        lhs = " + ".join(dv)
+    elif not dv:
+        return None
+
+    rhs_parts: List[str] = []
+
+    if iv:
+        # Marginal: each IV as a separate main effect
+        if rhs_as_factors:
+            rhs_parts.extend(f"C({col})" for col in iv)
+        else:
+            rhs_parts.extend(col for col in iv)
+
+    if by:
+        if rhs_as_factors:
+            by_terms = [f"C({col})" for col in by]
+        else:
+            by_terms = [col for col in by]
+
+        if over:
+            # Star expansion: by * over
+            if rhs_as_factors:
+                over_terms = [f"C({col})" for col in over]
+            else:
+                over_terms = [col for col in over]
+            rhs_parts.append("*".join(by_terms + over_terms))
+        else:
+            # Cell means: colon-joined
+            rhs_parts.append(":".join(by_terms))
+
+    if not rhs_parts:
+        if not ensure_structured:
+            #return lhs
+            return Formula(lhs)
+        else:
+            return Formula(f"{lhs} ~ 1")
+
+    return Formula(f"{lhs} ~ {' + '.join(rhs_parts)}")
 
 # ======================================================================
 # Formula parsing: formula string → FormulaSpec

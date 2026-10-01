@@ -29,7 +29,7 @@ Usage
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd
 
@@ -93,6 +93,12 @@ class TableSpec(CoreDataclass):
         Optional footnotes to attach to the table.
     decimals : int
         Number of decimal places for formatting.  Default is 4.
+    n_total : int or None
+        Number of rows handed to the engine, before any deletion.
+    n_observed : int or None
+        Number of complete cases across the design.
+    n_incomplete : int or None
+        Number of rows with at least one missing value across the design.
     """
 
     columns: List[str] = field(default_factory=list)
@@ -103,6 +109,29 @@ class TableSpec(CoreDataclass):
     footnotes: Optional[List[str]] = None
     decimals: int = 4
     table_format: Dict[str, int] = field(default_factory=dict)
+    n_total: Optional[int] = None
+    n_observed: Optional[int] = None
+    n_incomplete: Optional[int] = None
+
+    @property
+    def n_missing(self) -> Optional[int]:
+        """Alias for *n_incomplete* (rows with at least one missing value)."""
+        return self.n_incomplete
+
+    @property
+    def missing_footnote(self) -> Optional[str]:
+        """Auto-generated footnote describing incomplete cases, or None.
+
+        Returns ``None`` when *n_incomplete* is 0 or unset, so no spurious
+        "0 observations dropped" note is emitted for complete data.
+        """
+        if not self.n_incomplete:
+            return None
+
+        return (
+            f"{self.n_incomplete} of {self.n_total} observations "
+            f"had at least one missing value across the design."
+        )
 
     def __post_init__(self):
         super().__post_init__()
@@ -224,7 +253,7 @@ class TableEngine(CoreDataclass):
         df: pd.DataFrame,
         row_vars: List[str],
         col_vars: List[str],
-        value_col: str,
+        value_col: Union[str, List[str]],
     ) -> pd.DataFrame:
         """Reshape a long-form result table into a pivot layout.
 
@@ -240,8 +269,10 @@ class TableEngine(CoreDataclass):
             Column(s) whose unique values form the row index.
         col_vars : list of str
             Column(s) whose unique values form the column headers.
-        value_col : str
-            Column containing the statistic values to pivot.
+        value_col : str or list of str
+            Column(s) containing the statistic values to pivot.  When a
+            list is supplied the result carries a column ``MultiIndex``
+            of ``(statistic, level)``.
 
         Returns
         -------
@@ -253,6 +284,8 @@ class TableEngine(CoreDataclass):
             columns=col_vars,
             values=value_col,
             aggfunc="first",
+            dropna=False,
+            sort=False,
         )
 
     # ------------------------------------------------------------------

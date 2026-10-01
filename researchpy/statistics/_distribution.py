@@ -147,7 +147,7 @@ s
 
     Examples
     --------
-    >>> from researchpy import _confidence_interval
+    >>> from researchpy.statistics import _confidence_interval
     >>> import researchpy.datasets as datasets
     >>> auto = datasets.auto()
     >>> ci_results = _confidence_interval(auto["price"], distribution="t")
@@ -217,7 +217,7 @@ s
 
     Examples
     --------
-    >>> from researchpy import _estimate_confidence_interval
+    >>> from researchpy.statistics import _estimate_confidence_interval
     >>> point_est = 5.0
     >>> scale_error_est = 1.0
     >>> distribution_name = "norm"

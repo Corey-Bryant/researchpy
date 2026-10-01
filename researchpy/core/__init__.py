@@ -10,11 +10,20 @@ Usage:
 
 """
 
-from researchpy.core.data_utils import as_array, validate_array
+from researchpy.core.data_utils import (
+    as_array,
+    as_frame,
+    as_series,
+    infer_variable_kind,
+    validate_array,
+)
 
 
 # Define what gets exported with "from researchpy.core import *"
 __all__ = [
     'as_array',
+    'as_frame',
+    'as_series',
+    'infer_variable_kind',
     'validate_array',
 ]

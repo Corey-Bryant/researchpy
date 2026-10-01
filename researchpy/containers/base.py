@@ -315,8 +315,8 @@ class CodeBook(CoreDataclass):
         TypeError
             If data is not a pandas Series or DataFrame.
         """
-        from ..descriptive import (
-            standard_error, confidence_interval, skewness, kurtosis,
+        from researchpy.statistics import (
+            standard_error, _confidence_interval, skewness, kurtosis,
             percentile, mode,
         )
         from ..descriptive.categorical import proportions
@@ -400,9 +400,9 @@ class CodeBook(CoreDataclass):
                     stats_dict["Range"] = round(float(np.nanmax(arr) - np.nanmin(arr)), decimals)
                 if "CI" in numeric_stats:
                     if valid >= 2:
-                        ci = confidence_interval(arr, confidence_level=ci_level, decimals=decimals)
+                        ci_results = _confidence_interval(arr, distribution="t", confidence=ci_level, decimals=decimals)
                         ci_label = f"{int(ci_level * 100)}% Conf. Interval"
-                        stats_dict[ci_label] = ci
+                        stats_dict[ci_label] = [round(ci_results.lower, decimals), round(ci_results.upper, decimals)]
                 if "Mode" in numeric_stats:
                     stats_dict["Mode"] = mode(arr)
                 if "Kurtosis" in numeric_stats:
