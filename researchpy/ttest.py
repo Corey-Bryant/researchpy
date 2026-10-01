@@ -92,25 +92,25 @@ def ttest(group1, group2, group1_name= None, group2_name= None,
         r = t_val / numpy.sqrt(t_val**2 + dof)
 
     elif equal_variances == True and paired == True:
-        group1 = group1[(group1.notnull()) & (group2.notnull())]
-        group2 = group2[(group1.notnull()) & (group2.notnull())]
+        # Drop pairs where either observation is missing. Compute the mask once
+        # from the original series so both are filtered on the same (aligned)
+        # index; reusing group1.notnull() after reassigning group1 would compare
+        # a shortened series against the full group2.
+        valid = group1.notnull() & group2.notnull()
+        group1 = group1[valid]
+        group2 = group2[valid]
 
         groups = pandas.concat([group1, group2], ignore_index=True)
         groups_diff = numpy.mean(group1) - numpy.mean(group2)
         diff = group1 - group2
 
         test = "Paired samples t-test"
-        t_val, p_val = scipy.stats.ttest_rel(group1, group2)
+        t_val, p_val = scipy.stats.ttest_rel(group1, group2, nan_policy= 'omit')
         dof = group1.count() - 1
 
         # Less than or greater than 0 p_vals
         lt_p_val = scipy.stats.t.cdf(t_val, dof)
         rt_p_val = 1 - scipy.stats.t.cdf(t_val, dof)
-
-        if t_val > 0:
-            temp = rt_p_val
-            rt_p_val = lt_p_val
-            lt_p_val = temp
 
         # -- Effect sizes
         # Cohen's d (1988)
